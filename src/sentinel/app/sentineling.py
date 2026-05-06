@@ -9,7 +9,7 @@ from kept.hk.configing import HealthKERIConfig
 from kept.hk.essring import APIClient
 from keri.app import habbing
 
-from sentinel.core.watching import WatchedAdjudicationPoller
+from sentinel.core.watching import WatchedAdjudicationPoller, ObvsSocketListener
 from sentinel.db.basing import SentinelBaser
 
 
@@ -58,6 +58,7 @@ def setup_hk(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) 
         List: A list of configured doers for the sentinel instance
 
     """
+    services = list()
     hby = habbing.Habery(name=name, base=base, bran=bran)
     hab = hby.habByName(alias)
     if not hab:
@@ -75,4 +76,17 @@ def setup_hk(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) 
 
     poller = WatchedAdjudicationPoller(hby=hby, essr=essr, db=db, poll_interval=5.0, check_interval=5.0)
 
-    return [poller]
+    services.append(poller)
+
+    if uxd:
+        socket_path = f"/tmp/sentinel_{hab.pre}.sock"
+        socket_listener = ObvsSocketListener(
+            hby=hby,
+            essr=essr,
+            db=db,
+            socket_path=socket_path,
+            check_interval=0.5
+        )
+        services.append(socket_listener)
+
+    return services
