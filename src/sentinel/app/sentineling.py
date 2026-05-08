@@ -3,13 +3,15 @@
 sentinel.app.sentineling module
 
 """
+
 from typing import List
 
 from kept.hk.configing import HealthKERIConfig
 from kept.hk.essring import APIClient
 from keri.app import habbing
 
-from sentinel.core.watching import WatchedAdjudicationPoller
+from sentinel.core.eventing import sync_server_key_state
+from sentinel.core.watching import WatchedAdjudicationPoller, ObvsSocketListener
 from sentinel.db.basing import SentinelBaser
 
 
@@ -17,7 +19,9 @@ class UnsupportedOperation(Exception):
     pass
 
 
-def setup_local(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) -> List:
+def setup_local(
+    name: str, alias: str, base: str, bran: str, uxd: bool, port: int
+) -> List:
     """
     Setup sentinel watcher configuration for KERI local watching.
 
@@ -39,7 +43,9 @@ def setup_local(name: str, alias: str, base: str, bran: str, uxd: bool, port: in
     raise UnsupportedOperation("Local watcher configuration is not supported yet")
 
 
-def setup_hk(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) -> List:
+async def setup_hk(
+    name: str, alias: str, base: str, bran: str, uxd: bool, port: int
+) -> List:
     """
     Setup sentinel watcher configuration for KERI local watching.
 
@@ -58,21 +64,33 @@ def setup_hk(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) 
         List: A list of configured doers for the sentinel instance
 
     """
-    hby = habbing.Habery(name=name, base=base, bran=bran)
-    hab = hby.habByName(alias)
+    sentinel_name = f"{name}-sentinel"
+    sentinel_alias = f"{alias}-sentinel"
+
+    services = list()
+    hby = habbing.Habery(name=sentinel_name, base=base, bran=bran)
+    hab = hby.habByName(sentinel_alias)
     if not hab:
-        raise ValueError(f"Alias '{alias}' not found in Habery '{name}'")
+        raise ValueError(
+            f"Sentinel alias for '{alias}' not found in sentinel Habery '{name}'"
+        )
 
     db = SentinelBaser(name=name, headDirPath=base)
 
     config = HealthKERIConfig.get_instance()
-    essr = APIClient(
-        url=config.protected_url,
-        root=config.api_aid,
-        hby=hby,
-        hab=hab
-    )
+    essr = APIClient(url=config.protected_url, root=config.api_aid, hby=hby, hab=hab)
 
-    poller = WatchedAdjudicationPoller(hby=hby, essr=essr, db=db, poll_interval=5.0, check_interval=5.0)
+    await sync_server_key_state(name, alias, base, bran, essr)
 
-    return [poller]
+    poller = WatchedAdjudicationPoller(hby=hby, essr=essr, db=db, poll_interval=15.0)
+
+    services.append(poller)
+
+    if uxd:
+        socket_path = f"/tmp/sentinel_{hab.pre}.sock"
+        socket_listener = ObvsSocketListener(
+            hby=hby, essr=essr, db=db, socket_path=socket_path, poll_interval=0.5
+        )
+        services.append(socket_listener)
+
+    return services
