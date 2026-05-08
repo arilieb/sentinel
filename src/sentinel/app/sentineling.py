@@ -3,12 +3,14 @@
 sentinel.app.sentineling module
 
 """
+import asyncio
 from typing import List
 
 from kept.hk.configing import HealthKERIConfig
 from kept.hk.essring import APIClient
 from keri.app import habbing
 
+from sentinel.core.eventing import sync_server_key_state
 from sentinel.core.watching import WatchedAdjudicationPoller, ObvsSocketListener
 from sentinel.db.basing import SentinelBaser
 
@@ -39,7 +41,7 @@ def setup_local(name: str, alias: str, base: str, bran: str, uxd: bool, port: in
     raise UnsupportedOperation("Local watcher configuration is not supported yet")
 
 
-def setup_hk(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) -> List:
+async def setup_hk(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) -> List:
     """
     Setup sentinel watcher configuration for KERI local watching.
 
@@ -58,11 +60,14 @@ def setup_hk(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) 
         List: A list of configured doers for the sentinel instance
 
     """
+    sentinel_name = f"{name}-sentinel"
+    sentinel_alias = f"{alias}-sentinel"
+
     services = list()
-    hby = habbing.Habery(name=name, base=base, bran=bran)
-    hab = hby.habByName(alias)
+    hby = habbing.Habery(name=sentinel_name, base=base, bran=bran)
+    hab = hby.habByName(sentinel_alias)
     if not hab:
-        raise ValueError(f"Alias '{alias}' not found in Habery '{name}'")
+        raise ValueError(f"Sentinel alias for '{alias}' not found in sentinel Habery '{name}'")
 
     db = SentinelBaser(name=name, headDirPath=base)
 
@@ -73,6 +78,8 @@ def setup_hk(name: str, alias: str, base: str, bran: str, uxd: bool, port: int) 
         hby=hby,
         hab=hab
     )
+
+    await sync_server_key_state(name, alias, base, bran, essr)
 
     poller = WatchedAdjudicationPoller(hby=hby, essr=essr, db=db, poll_interval=15.0)
 

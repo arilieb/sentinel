@@ -3,7 +3,7 @@
 Unit tests for sentinel.app.sentineling module
 """
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, AsyncMock
 
 from sentinel.app.sentineling import setup_local, setup_hk, UnsupportedOperation
 
@@ -29,7 +29,7 @@ class TestSetupLocal(unittest.TestCase):
         )
 
 
-class TestSetupHk(unittest.TestCase):
+class TestSetupHk(unittest.IsolatedAsyncioTestCase):
     """Test cases for setup_hk function"""
 
     def setUp(self):
@@ -40,20 +40,22 @@ class TestSetupHk(unittest.TestCase):
         self.bran = "testbran"
         self.port = 8080
 
+    @patch('sentinel.app.sentineling.sync_server_key_state', new_callable=AsyncMock)
     @patch('sentinel.app.sentineling.ObvsSocketListener')
     @patch('sentinel.app.sentineling.WatchedAdjudicationPoller')
     @patch('sentinel.app.sentineling.APIClient')
     @patch('sentinel.app.sentineling.HealthKERIConfig')
     @patch('sentinel.app.sentineling.SentinelBaser')
     @patch('sentinel.app.sentineling.habbing.Habery')
-    def test_setup_hk_without_uxd(
+    async def test_setup_hk_without_uxd(
         self,
         mock_habery_class,
         mock_baser_class,
         mock_config_class,
         mock_api_client_class,
         mock_poller_class,
-        mock_socket_listener_class
+        mock_socket_listener_class,
+        mock_sync_server
     ):
         """Test setup_hk without uxd flag returns only poller"""
         # Setup mocks
@@ -78,7 +80,7 @@ class TestSetupHk(unittest.TestCase):
         mock_poller_class.return_value = mock_poller
 
         # Call setup_hk without uxd
-        result = setup_hk(
+        result = await setup_hk(
             name=self.name,
             alias=self.alias,
             base=self.base,
@@ -87,13 +89,17 @@ class TestSetupHk(unittest.TestCase):
             port=self.port
         )
 
-        # Verify Habery initialization
+        # Verify Habery initialization with sentinel_name
+        sentinel_name = f"{self.name}-sentinel"
         mock_habery_class.assert_called_once_with(
-            name=self.name,
+            name=sentinel_name,
             base=self.base,
             bran=self.bran
         )
-        mock_hby.habByName.assert_called_once_with(self.alias)
+
+        # Verify habByName called with sentinel_alias
+        sentinel_alias = f"{self.alias}-sentinel"
+        mock_hby.habByName.assert_called_once_with(sentinel_alias)
 
         # Verify SentinelBaser initialization
         mock_baser_class.assert_called_once_with(
@@ -112,12 +118,17 @@ class TestSetupHk(unittest.TestCase):
             hab=mock_hab
         )
 
+        # Verify sync_server_key_state was called
+        mock_sync_server.assert_called_once_with(
+            self.name, self.alias, self.base, self.bran, mock_essr
+        )
+
         # Verify WatchedAdjudicationPoller initialization
         mock_poller_class.assert_called_once_with(
             hby=mock_hby,
             essr=mock_essr,
             db=mock_db,
-            poll_interval=15.0,
+            poll_interval=15.0
         )
 
         # Verify ObvsSocketListener was NOT created
@@ -128,20 +139,22 @@ class TestSetupHk(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], mock_poller)
 
+    @patch('sentinel.app.sentineling.sync_server_key_state', new_callable=AsyncMock)
     @patch('sentinel.app.sentineling.ObvsSocketListener')
     @patch('sentinel.app.sentineling.WatchedAdjudicationPoller')
     @patch('sentinel.app.sentineling.APIClient')
     @patch('sentinel.app.sentineling.HealthKERIConfig')
     @patch('sentinel.app.sentineling.SentinelBaser')
     @patch('sentinel.app.sentineling.habbing.Habery')
-    def test_setup_hk_with_uxd(
+    async def test_setup_hk_with_uxd(
         self,
         mock_habery_class,
         mock_baser_class,
         mock_config_class,
         mock_api_client_class,
         mock_poller_class,
-        mock_socket_listener_class
+        mock_socket_listener_class,
+        mock_sync_server
     ):
         """Test setup_hk with uxd flag returns both poller and socket listener"""
         # Setup mocks
@@ -169,7 +182,7 @@ class TestSetupHk(unittest.TestCase):
         mock_socket_listener_class.return_value = mock_socket_listener
 
         # Call setup_hk with uxd=True
-        result = setup_hk(
+        result = await setup_hk(
             name=self.name,
             alias=self.alias,
             base=self.base,
@@ -178,13 +191,17 @@ class TestSetupHk(unittest.TestCase):
             port=self.port
         )
 
-        # Verify Habery initialization
+        # Verify Habery initialization with sentinel_name
+        sentinel_name = f"{self.name}-sentinel"
         mock_habery_class.assert_called_once_with(
-            name=self.name,
+            name=sentinel_name,
             base=self.base,
             bran=self.bran
         )
-        mock_hby.habByName.assert_called_once_with(self.alias)
+
+        # Verify habByName called with sentinel_alias
+        sentinel_alias = f"{self.alias}-sentinel"
+        mock_hby.habByName.assert_called_once_with(sentinel_alias)
 
         # Verify SentinelBaser initialization
         mock_baser_class.assert_called_once_with(
@@ -201,6 +218,11 @@ class TestSetupHk(unittest.TestCase):
             root=mock_config.api_aid,
             hby=mock_hby,
             hab=mock_hab
+        )
+
+        # Verify sync_server_key_state was called
+        mock_sync_server.assert_called_once_with(
+            self.name, self.alias, self.base, self.bran, mock_essr
         )
 
         # Verify WatchedAdjudicationPoller initialization
@@ -227,20 +249,22 @@ class TestSetupHk(unittest.TestCase):
         self.assertEqual(result[0], mock_poller)
         self.assertEqual(result[1], mock_socket_listener)
 
+    @patch('sentinel.app.sentineling.sync_server_key_state', new_callable=AsyncMock)
     @patch('sentinel.app.sentineling.ObvsSocketListener')
     @patch('sentinel.app.sentineling.WatchedAdjudicationPoller')
     @patch('sentinel.app.sentineling.APIClient')
     @patch('sentinel.app.sentineling.HealthKERIConfig')
     @patch('sentinel.app.sentineling.SentinelBaser')
     @patch('sentinel.app.sentineling.habbing.Habery')
-    def test_setup_hk_alias_not_found(
+    async def test_setup_hk_alias_not_found(
         self,
         mock_habery_class,
         mock_baser_class,
         mock_config_class,
         mock_api_client_class,
         mock_poller_class,
-        mock_socket_listener_class
+        mock_socket_listener_class,
+        mock_sync_server
     ):
         """Test setup_hk raises ValueError when alias is not found"""
         # Setup mocks - habByName returns None
@@ -250,7 +274,7 @@ class TestSetupHk(unittest.TestCase):
 
         # Call setup_hk and expect ValueError
         with self.assertRaises(ValueError) as context:
-            setup_hk(
+            await setup_hk(
                 name=self.name,
                 alias=self.alias,
                 base=self.base,
@@ -259,36 +283,40 @@ class TestSetupHk(unittest.TestCase):
                 port=self.port
             )
 
-        # Verify error message
+        # Verify error message (updated to match new code)
         self.assertEqual(
             str(context.exception),
-            f"Alias '{self.alias}' not found in Habery '{self.name}'"
+            f"Sentinel alias for '{self.alias}' not found in sentinel Habery '{self.name}'"
         )
 
-        # Verify habByName was called
-        mock_hby.habByName.assert_called_once_with(self.alias)
+        # Verify habByName was called with sentinel_alias
+        sentinel_alias = f"{self.alias}-sentinel"
+        mock_hby.habByName.assert_called_once_with(sentinel_alias)
 
         # Verify subsequent initialization was not called
         mock_baser_class.assert_not_called()
         mock_config_class.get_instance.assert_not_called()
         mock_api_client_class.assert_not_called()
+        mock_sync_server.assert_not_called()
         mock_poller_class.assert_not_called()
         mock_socket_listener_class.assert_not_called()
 
+    @patch('sentinel.app.sentineling.sync_server_key_state', new_callable=AsyncMock)
     @patch('sentinel.app.sentineling.ObvsSocketListener')
     @patch('sentinel.app.sentineling.WatchedAdjudicationPoller')
     @patch('sentinel.app.sentineling.APIClient')
     @patch('sentinel.app.sentineling.HealthKERIConfig')
     @patch('sentinel.app.sentineling.SentinelBaser')
     @patch('sentinel.app.sentineling.habbing.Habery')
-    def test_setup_hk_socket_path_uses_hab_pre(
+    async def test_setup_hk_socket_path_uses_hab_pre(
         self,
         mock_habery_class,
         mock_baser_class,
         mock_config_class,
         mock_api_client_class,
         mock_poller_class,
-        mock_socket_listener_class
+        mock_socket_listener_class,
+        mock_sync_server
     ):
         """Test that socket path uses hab.pre instead of name parameter"""
         # Setup mocks with specific pre value
@@ -316,7 +344,7 @@ class TestSetupHk(unittest.TestCase):
         mock_socket_listener_class.return_value = mock_socket_listener
 
         # Call setup_hk with uxd=True
-        result = setup_hk(
+        result = await setup_hk(
             name="different_name",
             alias=self.alias,
             base=self.base,
@@ -331,20 +359,22 @@ class TestSetupHk(unittest.TestCase):
         call_kwargs = mock_socket_listener_class.call_args[1]
         self.assertEqual(call_kwargs['socket_path'], expected_socket_path)
 
+    @patch('sentinel.app.sentineling.sync_server_key_state', new_callable=AsyncMock)
     @patch('sentinel.app.sentineling.ObvsSocketListener')
     @patch('sentinel.app.sentineling.WatchedAdjudicationPoller')
     @patch('sentinel.app.sentineling.APIClient')
     @patch('sentinel.app.sentineling.HealthKERIConfig')
     @patch('sentinel.app.sentineling.SentinelBaser')
     @patch('sentinel.app.sentineling.habbing.Habery')
-    def test_setup_hk_returns_services_list_type(
+    async def test_setup_hk_returns_services_list_type(
         self,
         mock_habery_class,
         mock_baser_class,
         mock_config_class,
         mock_api_client_class,
         mock_poller_class,
-        mock_socket_listener_class
+        mock_socket_listener_class,
+        mock_sync_server
     ):
         """Test that setup_hk returns a list"""
         # Setup mocks
@@ -369,7 +399,7 @@ class TestSetupHk(unittest.TestCase):
         mock_poller_class.return_value = mock_poller
 
         # Call setup_hk
-        result = setup_hk(
+        result = await setup_hk(
             name=self.name,
             alias=self.alias,
             base=self.base,

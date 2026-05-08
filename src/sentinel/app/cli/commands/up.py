@@ -9,7 +9,7 @@ import argparse
 import json
 
 import requests
-from hio import help
+from keri import help
 from keri import core, kering
 from keri.app import habbing, connecting
 from keri.app.keeping import Algos
@@ -246,7 +246,7 @@ def up(args):
             raise Exception(f"Error processing witness {witness_name}: {e}")
 
     # Now create a rotation event with the new witnesses and None for Toad so ample is used to calculate.
-    msg = server_hab.rotate(isith="1", ncount=1, nsith="1", adds=witness_aids, toad=None)
+    server_hab.rotate(isith="1", ncount=1, nsith="1", adds=witness_aids, toad=None)
 
     # Get the full KEL from server_hab
     kel = server_hab.replyToOobi(server_hab.pre, role=kering.Roles.controller)

@@ -90,7 +90,7 @@ async def async_run_sentinel(args):
                                           uxd=args.uxd,
                                           port=int(args.port))
     else:
-        services = sentineling.setup_hk(name=args.name,
+        services = await sentineling.setup_hk(name=args.name,
                                        alias=args.alias,
                                        base=args.base,
                                        bran=args.bran,
