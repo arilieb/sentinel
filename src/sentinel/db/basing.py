@@ -5,10 +5,41 @@ locksmith.ui.vault.healthKERI.db.basing module
 Sentinel-specific  database (SentinelBaser).
 
 """
+from collections import namedtuple
+from dataclasses import dataclass
 
 from keri import core
 from keri.db import dbing, subing
 
+Stateage = namedtuple("Stateage", 'even ahead behind duplicitous unresponsive')
+States = Stateage(even="even", ahead="ahead", behind="behind", duplicitous="duplicitous", unresponsive="unresponsive")
+
+
+class WitnessState:
+    """
+    State of an AID according to a particular
+    """
+    wit: str
+    state: Stateage
+    sn: int
+    dig: str
+
+
+@dataclass
+class WitnessQuery:
+    """
+        Witness query record
+    """
+    watcher_id: str
+    aid: str
+    wit: str
+    query_timestamp: str
+    response_received: bool
+    state: str
+    keystate: str = None
+    sn: int = None
+    dig: str = None
+    error: str = None
 
 class SentinelBaser(dbing.LMDBer):
     """Plugin-owned database for healthKERI state.

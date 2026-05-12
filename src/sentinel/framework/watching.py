@@ -1,0 +1,212 @@
+"""
+File watching service for the Sentinel Framework.
+
+Provides polling-based file watching for KEL/TEL/Credential exports.
+"""
+
+import asyncio
+import logging
+from pathlib import Path
+from datetime import datetime
+from typing import Optional, Dict
+
+from sentinel.framework.registry import get_registry
+from sentinel.framework.events import KELEvent, TELEvent, CredentialEvent
+
+logger = logging.getLogger(__name__)
+
+
+class FileWatchingService:
+    """
+    Polling-based file watching service for KEL/TEL/Credential exports.
+
+    Monitors export directories for .cesr files and dispatches events to
+    registered handlers when files are created or modified.
+
+    Designed for standalone applications - tracks state in memory using file mtimes.
+
+    Example:
+        service = FileWatchingService(
+            export_dir="/usr/local/sentinel",
+            poll_interval=2.0
+        )
+        await service.run()
+    """
+
+    def __init__(
+        self,
+        export_dir: str,
+        poll_interval: float = 2.0,
+        hby=None,
+        essr=None,
+        db=None,
+    ):
+        """
+        Initialize FileWatchingService.
+
+        Args:
+            export_dir: Base export directory (e.g., /usr/local/sentinel)
+            poll_interval: Polling interval in seconds (default: 2.0)
+            hby: Optional Habery instance for KERI operations
+            essr: Optional API client for healthKERI
+            db: Optional database instance
+        """
+        self.export_dir = Path(export_dir)
+        self.poll_interval = poll_interval
+        self.hby = hby
+        self.essr = essr
+        self.db = db
+        self.registry = get_registry()
+        self._task = None
+        self._running = False
+
+        # In-memory state tracking: {filepath: mtime}
+        self._file_state: Dict[str, float] = {}
+
+        # Directories to watch: {event_type: directory_path}
+        self.watch_dirs = {
+            "kel": self.export_dir / "kel",
+            "tel": self.export_dir / "tel",
+            "credential": self.export_dir / "cred",
+        }
+
+    async def run(self):
+        """
+        Main async loop that polls for file changes.
+
+        Algorithm:
+        1. Sleep for poll_interval
+        2. Scan watch directories for .cesr files
+        3. Check file mtimes against last known state (in-memory)
+        4. For new/modified files:
+           - Read file contents
+           - Extract AID from filename
+           - Create event object
+           - Dispatch to handlers via registry
+        5. Update in-memory state with new file mtimes
+
+        Runs until stop() is called or task is cancelled.
+        """
+        self._running = True
+        logger.info(
+            f"FileWatchingService: Starting with poll_interval={self.poll_interval}s, "
+            f"watching {self.export_dir}"
+        )
+
+        while self._running:
+            try:
+                await asyncio.sleep(self.poll_interval)
+
+                # Skip if no handlers registered
+                if not self.registry.get_handlers():
+                    logger.debug(
+                        "FileWatchingService: No handlers registered, skipping"
+                    )
+                    continue
+
+                # Scan each watch directory
+                for event_type, watch_dir in self.watch_dirs.items():
+                    if not watch_dir.exists():
+                        logger.debug(
+                            f"FileWatchingService: Directory does not exist: {watch_dir}"
+                        )
+                        continue
+
+                    await self._scan_directory(event_type, watch_dir)
+
+            except asyncio.CancelledError:
+                logger.info("FileWatchingService: Task cancelled")
+                break
+            except Exception as e:
+                logger.exception(f"FileWatchingService: Error in run loop: {e}")
+                # Continue despite errors
+
+        logger.info("FileWatchingService: Stopped")
+
+    async def _scan_directory(self, event_type: str, directory: Path):
+        """
+        Scan a directory for .cesr files and dispatch events for changes.
+
+        Args:
+            event_type: Event type ('kel', 'tel', 'cred')
+            directory: Directory path to scan
+        """
+        try:
+            for filepath in directory.glob("*.cesr"):
+                try:
+                    # Get file stats
+                    stat = filepath.stat()
+                    mtime = stat.st_mtime
+
+                    # Check against last known state (in-memory)
+                    file_key = str(filepath)
+                    last_mtime = self._file_state.get(file_key)
+
+                    if last_mtime is not None and mtime <= last_mtime:
+                        # No change
+                        continue
+
+                    # File is new or modified
+                    logger.info(
+                        f"FileWatchingService: Detected change - {event_type}/{filepath.name}"
+                    )
+
+                    # Read file contents
+                    with open(filepath, "rb") as f:
+                        data = f.read()
+
+                    # Extract AID from filename (filename is {aid}.cesr)
+                    aid = filepath.stem
+
+                    # Create event object
+                    event_class = {
+                        "kel": KELEvent,
+                        "tel": TELEvent,
+                        "credential": CredentialEvent,
+                    }[event_type]
+
+                    event = event_class(
+                        aid=aid,
+                        filepath=str(filepath),
+                        data=data,
+                        timestamp=datetime.fromtimestamp(mtime),
+                        hby=self.hby,
+                        essr=self.essr,
+                        db=self.db,
+                    )
+
+                    # Dispatch to handlers
+                    await self.registry.dispatch(event_type, event)
+
+                    # Update in-memory state
+                    self._file_state[file_key] = mtime
+
+                except Exception as e:
+                    logger.exception(
+                        f"FileWatchingService: Error processing {filepath}: {e}"
+                    )
+                    continue
+
+        except Exception as e:
+            logger.exception(f"FileWatchingService: Error scanning {directory}: {e}")
+
+    def start(self):
+        """
+        Start the service as an asyncio task.
+
+        Returns:
+            The asyncio Task running the service
+        """
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self.run())
+        return self._task
+
+    def stop(self):
+        """
+        Stop the service task.
+
+        Sets the running flag to False and cancels the task if still running.
+        """
+        self._running = False
+        if self._task and not self._task.done():
+            self._task.cancel()

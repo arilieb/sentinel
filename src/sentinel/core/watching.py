@@ -563,8 +563,6 @@ class ObvsSocketListener:
             logger.debug(f"ObvsSocketListener: Received {len(data)} bytes from {peer}")
 
             # Check and add new obvs entries
-            self.hby.db.obvs.trim()
-
             self.psr.parseOne(data)
             await self._check_and_add_obvs()
 

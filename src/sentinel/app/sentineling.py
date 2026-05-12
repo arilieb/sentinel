@@ -12,6 +12,7 @@ from keri.app import habbing
 
 from sentinel.core.eventing import sync_server_key_state
 from sentinel.core.watching import WatchedAdjudicationPoller, ObvsSocketListener
+from sentinel.core.witnessing import LocalSocketListener
 from sentinel.db.basing import SentinelBaser
 
 
@@ -19,14 +20,13 @@ class UnsupportedOperation(Exception):
     pass
 
 
-def setup_local(
-    name: str, alias: str, base: str, bran: str, uxd: bool, port: int
+async def setup_local(
+    name: str, alias: str, base: str, bran: str, uxd: bool, port: int, export_dir: str = "/usr/local/sentinel"
 ) -> List:
     """
     Setup sentinel watcher configuration for KERI local watching.
 
-    Configures a sentinel instance that monitors KERI events using either the healthKERI
-    Watcher Network or direct witness querying.
+    Configures a sentinel instance that monitors KERI events using direct witness querying.
 
     Parameters:
         name: The name of the sentinel instance
@@ -35,12 +35,43 @@ def setup_local(
         bran: The passcode for the sentinel instance
         uxd: Flag indicating whether to use Unix domain socket
         port: The port number for network communication
+        export_dir: Directory for exporting CESR files (default: /usr/local/sentinel)
 
     Returns:
-        List: A list of configured doers for the sentinel instance
+        List: A list of configured services for the sentinel instance
 
     """
-    raise UnsupportedOperation("Local watcher configuration is not supported yet")
+    from sentinel.core.witnessing import Watcher
+
+    sentinel_name = f"{name}-sentinel"
+    sentinel_alias = f"{alias}-sentinel"
+
+    services = list()
+
+    # Create Habery for managing identifiers
+    hby = habbing.Habery(name=sentinel_name, base=base, bran=bran)
+    hab = hby.habByName(sentinel_alias)
+    if not hab:
+        raise ValueError(
+            f"Sentinel alias for '{alias}' not found in sentinel Habery '{name}'"
+        )
+
+    # Create database for watcher-specific data
+    db = SentinelBaser(name=name, headDirPath=base)
+
+    # Create local Watcher for direct witness querying
+    watcher = Watcher(db=db, hby=hby, hab=hab, export_dir=export_dir)
+    services.append(watcher)
+
+    # Optional: Unix domain socket listener for real-time updates
+    if uxd:
+        socket_path = f"/tmp/sentinel_{hab.pre}.sock"
+        socket_listener = LocalSocketListener(
+            hby=hby, watcher=watcher, db=db, socket_path=socket_path, poll_interval=0.5
+        )
+        services.append(socket_listener)
+
+    return services
 
 
 async def setup_hk(
@@ -61,7 +92,7 @@ async def setup_hk(
         port: The port number for network communication
 
     Returns:
-        List: A list of configured doers for the sentinel instance
+        List: A list of configured task services for the sentinel instance
 
     """
     sentinel_name = f"{name}-sentinel"
