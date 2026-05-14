@@ -5,20 +5,28 @@ locksmith.ui.vault.healthKERI.db.basing module
 Sentinel-specific  database (SentinelBaser).
 
 """
+
 from collections import namedtuple
 from dataclasses import dataclass
 
 from keri import core
-from keri.db import dbing, subing, koming
+from keri.db import dbing, subing
 
-Stateage = namedtuple("Stateage", 'even ahead behind duplicitous unresponsive')
-States = Stateage(even="even", ahead="ahead", behind="behind", duplicitous="duplicitous", unresponsive="unresponsive")
+Stateage = namedtuple("Stateage", "even ahead behind duplicitous unresponsive")
+States = Stateage(
+    even="even",
+    ahead="ahead",
+    behind="behind",
+    duplicitous="duplicitous",
+    unresponsive="unresponsive",
+)
 
 
 class WitnessState:
     """
     State of an AID according to a particular
     """
+
     wit: str
     state: Stateage
     sn: int
@@ -28,8 +36,9 @@ class WitnessState:
 @dataclass
 class WitnessQuery:
     """
-        Witness query record
+    Witness query record
     """
+
     watcher_id: str
     aid: str
     wit: str
@@ -40,6 +49,7 @@ class WitnessQuery:
     sn: int = None
     dig: str = None
     error: str = None
+
 
 class AppBaser(dbing.LMDBer):
     """Plugin-owned database for healthKERI state.
@@ -63,6 +73,8 @@ class AppBaser(dbing.LMDBer):
         super(AppBaser, self).reopen(**kwa)
 
         # Most recent watched events
-        self.file_state = subing.CesrSuber(db=self, subkey="file_state.", klas=core.Number, sep="^")
+        self.file_state = subing.CesrSuber(
+            db=self, subkey="file_state.", klas=core.Number, sep="^"
+        )
 
         return self.env

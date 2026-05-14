@@ -5,7 +5,6 @@ Provides singleton registry for managing event handlers and dispatching events.
 """
 
 import logging
-import asyncio
 import inspect
 from typing import List, Set
 

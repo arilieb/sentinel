@@ -21,7 +21,13 @@ class UnsupportedOperation(Exception):
 
 
 async def setup_local(
-    name: str, alias: str, base: str, bran: str, uxd: bool, port: int, export_dir: str = "/usr/local/sentinel"
+    name: str,
+    alias: str,
+    base: str,
+    bran: str,
+    uxd: bool,
+    port: int,
+    export_dir: str = "/usr/local/sentinel",
 ) -> List:
     """
     Setup sentinel watcher configuration for KERI local watching.

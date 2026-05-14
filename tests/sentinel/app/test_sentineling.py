@@ -6,7 +6,7 @@ Unit tests for sentinel.app.sentineling module
 import unittest
 from unittest.mock import Mock, patch, AsyncMock
 
-from sentinel.app.sentineling import setup_local, setup_hk, UnsupportedOperation
+from sentinel.app.sentineling import setup_local, setup_hk
 
 
 class TestSetupLocal(unittest.IsolatedAsyncioTestCase):
@@ -239,7 +239,11 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
 
         # Verify WatchedAdjudicationPoller initialization
         mock_poller_class.assert_called_once_with(
-            hby=mock_hby, essr=mock_essr, db=mock_db, poll_interval=15.0, export_dir="/tmp/export"
+            hby=mock_hby,
+            essr=mock_essr,
+            db=mock_db,
+            poll_interval=15.0,
+            export_dir="/tmp/export",
         )
 
         # Verify ObvsSocketListener was NOT created
@@ -334,7 +338,11 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
 
         # Verify WatchedAdjudicationPoller initialization
         mock_poller_class.assert_called_once_with(
-            hby=mock_hby, essr=mock_essr, db=mock_db, poll_interval=15.0, export_dir="/tmp/export"
+            hby=mock_hby,
+            essr=mock_essr,
+            db=mock_db,
+            poll_interval=15.0,
+            export_dir="/tmp/export",
         )
 
         # Verify ObvsSocketListener initialization with correct socket path

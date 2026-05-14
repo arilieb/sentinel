@@ -5,7 +5,6 @@ Defines structured event data passed to handlers when KEL/TEL/Credential files c
 """
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Optional
 
 

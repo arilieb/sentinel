@@ -432,7 +432,11 @@ class TestWatchedAdjudicationPoller(unittest.IsolatedAsyncioTestCase):
     def test_init(self):
         """Test poller initialization"""
         poller = WatchedAdjudicationPoller(
-            hby=self.mock_hby, essr=self.mock_essr, db=self.mock_db, poll_interval=15.0, export_dir="/tmp/test"
+            hby=self.mock_hby,
+            essr=self.mock_essr,
+            db=self.mock_db,
+            poll_interval=15.0,
+            export_dir="/tmp/test",
         )
 
         self.assertEqual(poller.hby, self.mock_hby)

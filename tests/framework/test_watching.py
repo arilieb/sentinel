@@ -6,8 +6,7 @@ import pytest
 import asyncio
 import tempfile
 from pathlib import Path
-from datetime import datetime
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from sentinel.framework.watching import FileWatchingService
 from sentinel.framework.handlers import EventHandler
 from sentinel.framework.events import KELEvent, TELEvent, CredentialEvent
@@ -117,12 +116,14 @@ class TestFileWatchingService:
         assert service.watch_dirs["credential"] == temp_export_dir / "cred"
 
     @pytest.mark.asyncio
-    async def test_detect_new_kel_file(self, temp_export_dir, handler, mock_db, mock_hby):
+    async def test_detect_new_kel_file(
+        self, temp_export_dir, handler, mock_db, mock_hby
+    ):
         """Test detecting a new KEL file"""
         from unittest.mock import patch
 
         # Mock the Parser to avoid actual CESR parsing
-        with patch('sentinel.framework.watching.parsing.Parser') as mock_parser_class:
+        with patch("sentinel.framework.watching.parsing.Parser") as mock_parser_class:
             mock_parser = Mock()
             mock_parser.parse = Mock()
             mock_parser_class.return_value = mock_parser
@@ -162,12 +163,14 @@ class TestFileWatchingService:
             assert event.filepath == str(kel_file)
 
     @pytest.mark.asyncio
-    async def test_detect_modified_kel_file(self, temp_export_dir, handler, mock_db, mock_hby):
+    async def test_detect_modified_kel_file(
+        self, temp_export_dir, handler, mock_db, mock_hby
+    ):
         """Test detecting a modified KEL file"""
         from unittest.mock import patch
 
         # Mock the Parser to avoid actual CESR parsing
-        with patch('sentinel.framework.watching.parsing.Parser') as mock_parser_class:
+        with patch("sentinel.framework.watching.parsing.Parser") as mock_parser_class:
             mock_parser = Mock()
             mock_parser.parse = Mock()
             mock_parser_class.return_value = mock_parser
@@ -195,7 +198,7 @@ class TestFileWatchingService:
             kel_file.write_bytes(b"modified data")
             # Touch the file to update mtime
             import os
-            import time
+
             mtime = os.path.getmtime(kel_file)
             os.utime(kel_file, (mtime + 2, mtime + 2))
 
@@ -220,7 +223,7 @@ class TestFileWatchingService:
         from unittest.mock import patch
 
         # Mock the Parser to avoid actual CESR parsing
-        with patch('sentinel.framework.watching.parsing.Parser') as mock_parser_class:
+        with patch("sentinel.framework.watching.parsing.Parser") as mock_parser_class:
             mock_parser = Mock()
             mock_parser.parse = Mock()
             mock_parser_class.return_value = mock_parser
@@ -251,12 +254,14 @@ class TestFileWatchingService:
             assert handler.tel_events[0].aid == "test_tel"
 
     @pytest.mark.asyncio
-    async def test_detect_credential_file(self, temp_export_dir, handler, mock_db, mock_hby):
+    async def test_detect_credential_file(
+        self, temp_export_dir, handler, mock_db, mock_hby
+    ):
         """Test detecting credential file"""
         from unittest.mock import patch
 
         # Mock the Parser to avoid actual CESR parsing
-        with patch('sentinel.framework.watching.parsing.Parser') as mock_parser_class:
+        with patch("sentinel.framework.watching.parsing.Parser") as mock_parser_class:
             mock_parser = Mock()
             mock_parser.parse = Mock()
             mock_parser_class.return_value = mock_parser
@@ -294,7 +299,7 @@ class TestFileWatchingService:
         from unittest.mock import patch
 
         # Mock the Parser to avoid actual CESR parsing
-        with patch('sentinel.framework.watching.parsing.Parser') as mock_parser_class:
+        with patch("sentinel.framework.watching.parsing.Parser") as mock_parser_class:
             mock_parser = Mock()
             mock_parser.parse = Mock()
             mock_parser_class.return_value = mock_parser
@@ -352,7 +357,7 @@ class TestFileWatchingService:
         mock_db_test.file_state.pin = mock_pin_test
 
         # Mock the Parser to avoid actual CESR parsing
-        with patch('sentinel.framework.watching.parsing.Parser') as mock_parser_class:
+        with patch("sentinel.framework.watching.parsing.Parser") as mock_parser_class:
             mock_parser = Mock()
             mock_parser.parse = Mock()
             mock_parser_class.return_value = mock_parser

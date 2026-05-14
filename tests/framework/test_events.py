@@ -2,7 +2,6 @@
 Tests for framework event data classes
 """
 
-import pytest
 from datetime import datetime
 from sentinel.framework.events import BaseEvent, KELEvent, TELEvent, CredentialEvent
 

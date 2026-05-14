@@ -5,10 +5,10 @@ sentinel.core.querying module
 Functions and services for executing queries against Witnesses
 
 """
+
 import asyncio
 import logging
 import random
-from typing import Optional
 from urllib.parse import urljoin
 
 import httpx
@@ -77,15 +77,24 @@ class Receiptor:
         Raises:
             kering.MissingEntryError: If witness has no HTTP endpoint
         """
-        urls = (hab.fetchUrls(eid=wit, scheme=kering.Schemes.http) or
-                hab.fetchUrls(eid=wit, scheme=kering.Schemes.https))
+        urls = hab.fetchUrls(eid=wit, scheme=kering.Schemes.http) or hab.fetchUrls(
+            eid=wit, scheme=kering.Schemes.https
+        )
         if not urls:
-            raise kering.MissingEntryError(f"unable to query witness {wit}, no http endpoint")
+            raise kering.MissingEntryError(
+                f"unable to query witness {wit}, no http endpoint"
+            )
 
-        base = urls[kering.Schemes.http] if kering.Schemes.http in urls else urls[kering.Schemes.https]
+        base = (
+            urls[kering.Schemes.http]
+            if kering.Schemes.http in urls
+            else urls[kering.Schemes.https]
+        )
         return urljoin(base, path)
 
-    async def _post_cesr(self, url: str, data: bytes, headers: dict = None) -> httpx.Response:
+    async def _post_cesr(
+        self, url: str, data: bytes, headers: dict = None
+    ) -> httpx.Response:
         """Post CESR-encoded data to witness endpoint
 
         Parameters:
@@ -145,13 +154,15 @@ class Receiptor:
                 rct = bytearray(response.content)
                 hab.psr.parseOne(bytearray(rct))
                 rserder = serdering.SerderKERI(raw=rct)
-                del rct[:rserder.size]
+                del rct[: rserder.size]
 
                 # pull off the count code
                 core.Counter(qb64b=rct, strip=True, gvrsn=kering.Vrsn_1_0)
                 return (wit, rct)
             else:
-                logger.warning(f"invalid response {response.status_code} from witness {wit}")
+                logger.warning(
+                    f"invalid response {response.status_code} from witness {wit}"
+                )
                 return (wit, None)
         except (kering.MissingEntryError, httpx.HTTPError) as e:
             logger.error(f"unable to get receipt from witness {wit}: {e}")
@@ -207,20 +218,20 @@ class Receiptor:
         ser = serdering.SerderKERI(raw=msg)
 
         # If we are a rotation event, may need to catch new witnesses up to current key state
-        if ser.ked['t'] in (coring.Ilks.rot,):
+        if ser.ked["t"] in (coring.Ilks.rot,):
             adds = ser.ked["ba"]
             # Catchup new witnesses in parallel
             if adds:
                 await asyncio.gather(
                     *[self.catchup(ser.pre, wit) for wit in adds],
-                    return_exceptions=True
+                    return_exceptions=True,
                 )
 
         # Collect receipts from all witnesses in parallel
         logger.debug(f"Querying {len(wits)} witnesses in parallel for receipts")
         results = await asyncio.gather(
             *[self._query_witness_for_receipt(hab, wit, msg, auths) for wit in wits],  # type: ignore
-            return_exceptions=True
+            return_exceptions=True,
         )
 
         # Process results and build receipts dict
@@ -243,27 +254,40 @@ class Receiptor:
                 wigs = [sig for w, sig in rcts.items() if w != wit]
 
                 msg_bytes = bytearray()
-                if ser.ked['t'] in (coring.Ilks.icp, coring.Ilks.dip):  # introduce new witnesses
+                if ser.ked["t"] in (
+                    coring.Ilks.icp,
+                    coring.Ilks.dip,
+                ):  # introduce new witnesses
                     from keri.app.agenting import schemes
+
                     msg_bytes.extend(schemes(self.hby.db, eids=ewits))
-                elif ser.ked['t'] in (coring.Ilks.rot, coring.Ilks.drt) and \
-                        ("ba" in ser.ked and wit in ser.ked["ba"]):  # Newly added witness, introduce to all
+                elif ser.ked["t"] in (coring.Ilks.rot, coring.Ilks.drt) and (
+                    "ba" in ser.ked and wit in ser.ked["ba"]
+                ):  # Newly added witness, introduce to all
                     from keri.app.agenting import schemes
+
                     msg_bytes.extend(schemes(self.hby.db, eids=ewits))
 
-                rserder = eventing.receipt(pre=hab.pre,
-                                           sn=sn,
-                                           said=ser.said)
+                rserder = eventing.receipt(pre=hab.pre, sn=sn, said=ser.said)
                 msg_bytes.extend(rserder.raw)
-                msg_bytes.extend(core.Counter(core.Codens.NonTransReceiptCouples,
-                                        count=len(wigs), gvrsn=kering.Vrsn_1_0).qb64b)
+                msg_bytes.extend(
+                    core.Counter(
+                        core.Codens.NonTransReceiptCouples,
+                        count=len(wigs),
+                        gvrsn=kering.Vrsn_1_0,
+                    ).qb64b
+                )
                 for wig in wigs:
                     msg_bytes.extend(wig)
 
-                propagation_tasks.append(self._propagate_receipt_to_witness(hab, wit, msg_bytes))
+                propagation_tasks.append(
+                    self._propagate_receipt_to_witness(hab, wit, msg_bytes)
+                )
 
             # Execute all propagations in parallel
-            logger.debug(f"Propagating receipts to {len(propagation_tasks)} witnesses in parallel")
+            logger.debug(
+                f"Propagating receipts to {len(propagation_tasks)} witnesses in parallel"
+            )
             await asyncio.gather(*propagation_tasks, return_exceptions=True)
 
         return list(rcts.keys())
@@ -381,7 +405,9 @@ class Receiptor:
                 hab.psr.parse(bytearray(ims))
                 return True
             else:
-                logger.info(f"Failed to retrieve log from {wit}: {response.status_code}")
+                logger.info(
+                    f"Failed to retrieve log from {wit}: {response.status_code}"
+                )
                 return False
         except (kering.MissingEntryError, httpx.HTTPError) as e:
             logger.error(f"unable to query logs from witness {wit}: {e}")
@@ -415,20 +441,26 @@ class Receiptor:
                 logger.debug(f"No events to send for catchup to witness {wit}")
                 return
 
-            logger.debug(f"Catching up witness {wit} with {len(events)} events in batches of {batch_size}")
+            logger.debug(
+                f"Catching up witness {wit} with {len(events)} events in batches of {batch_size}"
+            )
 
             # Send events in batches for better performance while maintaining order
             for i in range(0, len(events), batch_size):
-                batch = events[i:i + batch_size]
+                batch = events[i : i + batch_size]
 
                 # Send this batch in parallel
-                tasks = [self._post_cesr(url, bytearray(fmsg), headers) for fmsg in batch]
+                tasks = [
+                    self._post_cesr(url, bytearray(fmsg), headers) for fmsg in batch
+                ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 # Check for errors in this batch
                 for idx, result in enumerate(results):
                     if isinstance(result, Exception):
-                        logger.error(f"Error sending event {i + idx} to witness {wit}: {result}")
+                        logger.error(
+                            f"Error sending event {i + idx} to witness {wit}: {result}"
+                        )
 
             logger.debug(f"Completed catchup for witness {wit}")
 

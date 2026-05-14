@@ -5,6 +5,7 @@ Sentinel
 sentinel.core.witnessing package
 
 """
+
 import asyncio
 import os
 from datetime import datetime, timezone, timedelta
@@ -54,35 +55,50 @@ class Watcher:
         self.cues = decking.Deck()
 
         self.rtr = routing.Router()
-        self.rvy = routing.Revery(db=self.hby.db, rtr=self.rtr, cues=self.cues,
-                                  lax=True, local=False)
+        self.rvy = routing.Revery(
+            db=self.hby.db, rtr=self.rtr, cues=self.cues, lax=True, local=False
+        )
 
         #  needs unique kevery with ims per remoter connnection
-        self.kvy = eventing.Kevery(db=self.hby.db,
-                                   cues=self.cues,
-                                   rvy=self.rvy,
-                                   lax=True,
-                                   local=False,
-                                   direct=False)
+        self.kvy = eventing.Kevery(
+            db=self.hby.db,
+            cues=self.cues,
+            rvy=self.rvy,
+            lax=True,
+            local=False,
+            direct=False,
+        )
         self.kvy.registerReplyRoutes(self.rtr)
 
         self.verifier = verifying.Verifier(hby=self.hby)
-        self.tvy = Tevery(reger=self.verifier.reger,
-                          db=self.hby.db, rvy=self.rvy,
-                          lax=True, local=False, cues=self.cues)
+        self.tvy = Tevery(
+            reger=self.verifier.reger,
+            db=self.hby.db,
+            rvy=self.rvy,
+            lax=True,
+            local=False,
+            cues=self.cues,
+        )
         self.tvy.registerReplyRoutes(self.rtr)
 
         self.exc = exchanging.Exchanger(hby=self.hby, handlers=[])
 
-        self.psr = parsing.Parser(framed=True,
-                                  kvy=self.kvy,
-                                  tvy=self.tvy,
-                                  exc=self.exc,
-                                  rvy=self.rvy,
-                                  vry=self.verifier)
+        self.psr = parsing.Parser(
+            framed=True,
+            kvy=self.kvy,
+            tvy=self.tvy,
+            exc=self.exc,
+            rvy=self.rvy,
+            vry=self.verifier,
+        )
 
         self.watched_identifiers = set()
-        for (_, _, oid), _ in self.hby.db.obvs.getItemIter(keys=(self.cid, self.hab.pre, )):
+        for (_, _, oid), _ in self.hby.db.obvs.getItemIter(
+            keys=(
+                self.cid,
+                self.hab.pre,
+            )
+        ):
             print(f"Adding {oid}")
             self.watched_identifiers.add(oid)
 
@@ -101,7 +117,13 @@ class Watcher:
 
         # Create and start background workers
         self.escrower = Escrower(kvy=self.kvy, rvy=self.rvy, tvy=self.tvy, exc=self.exc)
-        self.sentinal_launcher = SentinalLauncher(db=self.db, hby=self.hby, hab=self.hab, cid=self.cid, export_dir=self.export_dir)
+        self.sentinal_launcher = SentinalLauncher(
+            db=self.db,
+            hby=self.hby,
+            hab=self.hab,
+            cid=self.cid,
+            export_dir=self.export_dir,
+        )
 
         escrow_task = asyncio.create_task(self.escrower.run())
         sentinal_task = asyncio.create_task(self.sentinal_launcher.run())
@@ -194,19 +216,33 @@ class SentinalLauncher:
 
     async def watch_watched(self):
         """Check watched AIDs and launch sentinals as needed"""
-        for (_, _, oid), observed in self.hby.db.obvs.getItemIter(keys=(self.cid, self.hab.pre, )):
+        for (_, _, oid), observed in self.hby.db.obvs.getItemIter(
+            keys=(
+                self.cid,
+                self.hab.pre,
+            )
+        ):
             if observed.enabled and oid not in self.sentinals:
                 dtnow = helping.nowUTC()
                 dte = helping.fromIso8601(observed.datetime)
                 if (dtnow - dte) > timedelta(seconds=self.WATCHERRETRY):
-                    sentinal = Sentinal(self.hby, self.hab, oid, self.cid, self.db, export_dir=self.export_dir)
+                    sentinal = Sentinal(
+                        self.hby,
+                        self.hab,
+                        oid,
+                        self.cid,
+                        self.db,
+                        export_dir=self.export_dir,
+                    )
                     self.sentinals[oid] = sentinal
 
                     # Start the sentinal task
                     asyncio.create_task(sentinal.run())
 
                     observed.datetime = helping.toIso8601(dtnow)
-                    self.hby.db.obvs.pin(keys=(self.cid, self.hab.pre, oid), val=observed)
+                    self.hby.db.obvs.pin(
+                        keys=(self.cid, self.hab.pre, oid), val=observed
+                    )
 
 
 class Escrower:
@@ -317,7 +353,7 @@ class Sentinal:
             wit=wit,
             query_timestamp=queryTimestamp,
             response_received=False,
-            state=States.unresponsive
+            state=States.unresponsive,
         )
 
         try:
@@ -330,7 +366,7 @@ class Sentinal:
             await receiptor.ksn(pre=self.oid, src=self.hab.pre, wit=wit)
 
             if (saider := self.hab.db.knas.get(keys)) is None:
-                witQuery.error = 'No response received within timeout'
+                witQuery.error = "No response received within timeout"
                 self.db.witq.pin(keys=(self.hab.pre, self.oid, wit), val=witQuery)
                 return None
 
@@ -356,7 +392,9 @@ class Sentinal:
 
     async def watch(self):
         """Async method to watch and query witnesses"""
-        logger.info(f"Launching watcher {self.hab.pre} for {self.oid} on behalf of {self.cid}")
+        logger.info(
+            f"Launching watcher {self.hab.pre} for {self.oid} on behalf of {self.cid}"
+        )
         if self.oid not in self.hby.kevers:
             logger.info(f"Unable to watch unknown aid={self.oid}")
             return
@@ -372,10 +410,15 @@ class Sentinal:
 
         try:
             # Query all witnesses in parallel
-            logger.debug(f"Querying {len(kever.wits)} witnesses in parallel for {self.oid}")
+            logger.debug(
+                f"Querying {len(kever.wits)} witnesses in parallel for {self.oid}"
+            )
             results = await asyncio.gather(
-                *[self._query_single_witness(wit, kever, receiptor, queryTimestamp) for wit in kever.wits],
-                return_exceptions=True
+                *[
+                    self._query_single_witness(wit, kever, receiptor, queryTimestamp)
+                    for wit in kever.wits
+                ],
+                return_exceptions=True,
             )
 
             # Process results and build states list
@@ -387,7 +430,9 @@ class Sentinal:
                 if result is not None:
                     states.append(result)
 
-            logger.debug(f"Received {len(states)} responses from {len(kever.wits)} witnesses")
+            logger.debug(
+                f"Received {len(states)} responses from {len(kever.wits)} witnesses"
+            )
 
             # First check for any duplicity, if so get out of here
             dups = [state for state in states if state.state == States.duplicitous]
@@ -396,7 +441,9 @@ class Sentinal:
             if len(dups) > 0:
                 logger.info(f"{len(dups)} witnesses have a duplicitous event")
                 for state in dups:
-                    logger.info(f"Duplicitous witness state for {state.wit} at Seq No. {state.sn} with digest: {state.dig}")
+                    logger.info(
+                        f"Duplicitous witness state for {state.wit} at Seq No. {state.sn} with digest: {state.dig}"
+                    )
                 return
 
             elif len(ahds) > 0:
@@ -404,14 +451,22 @@ class Sentinal:
                 # super majority)
                 digs = set([state.dig for state in ahds])
                 if len(digs) > 1:  # Duplicity across witness sets
-                    logger.info(f"There are multiple duplicitous events on witnesses for {self.oid}")
+                    logger.info(
+                        f"There are multiple duplicitous events on witnesses for {self.oid}"
+                    )
                     return
 
                 else:  # all witnesses that are ahead agree on the event
-                    logger.info(f"{len(ahds)} witnesses have an event that is ahead of the local KEL:")
+                    logger.info(
+                        f"{len(ahds)} witnesses have an event that is ahead of the local KEL:"
+                    )
 
                 state = random.choice(ahds)
-                fn = self.hby.kevers[self.oid].sn + 1 if self.oid in self.hby.kevers else 0
+                fn = (
+                    self.hby.kevers[self.oid].sn + 1
+                    if self.oid in self.hby.kevers
+                    else 0
+                )
 
                 await receiptor.logs(pre=self.oid, src=self.hab.pre, wit=state.wit, fn=fn, sn=state.sn)  # type: ignore
 
@@ -420,7 +475,9 @@ class Sentinal:
                     await filing.export_kel(
                         hby=self.hby, aid=self.oid, export_dir=self.export_dir
                     )
-                    logger.info(f"Successfully exported KEL for {self.oid} after detecting new events")
+                    logger.info(
+                        f"Successfully exported KEL for {self.oid} after detecting new events"
+                    )
                 except Exception as e:
                     logger.error(f"Failed to export KEL for {self.oid}: {e}")
 
@@ -431,8 +488,10 @@ class Sentinal:
                 return
             else:
                 state = random.choice(states)
-                logger.info(f"Local key state for {self.oid} is consistent at seq no. {state.sn} with the "
-                            f"{len(states)} (out of {len(kever.wits)} total) witnesses that responded.")
+                logger.info(
+                    f"Local key state for {self.oid} is consistent at seq no. {state.sn} with the "
+                    f"{len(states)} (out of {len(kever.wits)} total) witnesses that responded."
+                )
                 return
         finally:
             # Always cleanup the receiptor
@@ -466,8 +525,6 @@ class Sentinal:
         return witstate
 
 
-
-
 class LocalSocketListener:
     """
     Asyncio-based Unix Domain Socket listener that monitors new obvs entries.
@@ -478,12 +535,12 @@ class LocalSocketListener:
     """
 
     def __init__(
-            self,
-            hby: Habery,
-            watcher: Watcher,
-            db,
-            socket_path: str,
-            poll_interval: float = 0.5,
+        self,
+        hby: Habery,
+        watcher: Watcher,
+        db,
+        socket_path: str,
+        poll_interval: float = 0.5,
     ):
         """
         Initialize the LocalSocketListener.
@@ -587,7 +644,7 @@ class LocalSocketListener:
             logger.exception(f"LocalSocketListener: Error during cleanup: {e}")
 
     async def _handle_connection(
-            self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
         """
         Handle a new connection by creating a task for it.
@@ -600,7 +657,7 @@ class LocalSocketListener:
         self._connection_tasks.add(task)
 
     async def _process_connection(
-            self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
         """
         Process a single connection: read data and check obvs.

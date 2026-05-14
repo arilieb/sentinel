@@ -7,12 +7,10 @@ Provides polling-based file watching for KEL/TEL/Credential exports.
 import asyncio
 import logging
 import socket
-from datetime import datetime, timezone
 from pathlib import Path
 
 from keri.app.habbing import Habery, Hab
 from keri.core import coring, parsing
-from keri.help import helping
 
 from sentinel.framework.events import KELEvent, TELEvent, CredentialEvent
 from sentinel.framework.registry import get_registry
@@ -158,9 +156,10 @@ class FileWatchingService:
 
                     # Extract AID from filename (filename is {aid}.cesr)
                     aid = filepath.stem
-                    
 
-                    parsing.Parser().parse(ims=bytes(data), kvy=self.hby.kvy, local=True)
+                    parsing.Parser().parse(
+                        ims=bytes(data), kvy=self.hby.kvy, local=True
+                    )
 
                     # Create event object
                     event_class = {
@@ -183,7 +182,9 @@ class FileWatchingService:
                     await self.registry.dispatch(event_type, event)
 
                     # Update in-memory state
-                    self.db.file_state.pin(keys=(file_key,), val=coring.Number(num=mtime))
+                    self.db.file_state.pin(
+                        keys=(file_key,), val=coring.Number(num=mtime)
+                    )
 
                 except Exception as e:
                     logger.exception(
@@ -214,7 +215,6 @@ class FileWatchingService:
         self._running = False
         if self._task and not self._task.done():
             self._task.cancel()
-
 
 
 class LocalWatcherConnector:
@@ -262,10 +262,9 @@ class LocalWatcherConnector:
         """
         # Build the route with the AID
         route = f"/watcher/{self.watcher}/add"
-        data = dict(cid=self.hab.pre,
-                    oid=aid)
+        data = dict(cid=self.hab.pre, oid=aid)
         if oobi:
-            data['oobi'] = oobi
+            data["oobi"] = oobi
 
         msg = self.hab.reply(route=route, data=data)
         self.hab.psr.parseOne(ims=bytes(msg))
