@@ -10,7 +10,7 @@ from collections import namedtuple
 from dataclasses import dataclass
 
 from keri import core
-from keri.db import dbing, subing, koming
+from keri.db import dbing, subing
 
 Stateage = namedtuple("Stateage", "even ahead behind duplicitous unresponsive")
 States = Stateage(
@@ -51,7 +51,7 @@ class WitnessQuery:
     error: str = None
 
 
-class SentinelBaser(dbing.LMDBer):
+class AppBaser(dbing.LMDBer):
     """Plugin-owned database for healthKERI state.
 
     Manages healthKERI accounts, teams, and witness provisioning state
@@ -62,23 +62,19 @@ class SentinelBaser(dbing.LMDBer):
     AltTailDirPath = ".keri/hk"
     TempPrefix = "hk"
 
-    def __init__(self, name="sentinel", headDirPath=None, reopen=True, **kwa):
-        self.watched_poll = None
-        self.witq = None
+    def __init__(self, name="app_base", headDirPath=None, reopen=True, **kwa):
+        self.file_state = None
 
-        super(SentinelBaser, self).__init__(
+        super(AppBaser, self).__init__(
             name=name, headDirPath=headDirPath, reopen=reopen, **kwa
         )
 
     def reopen(self, **kwa):
-        super(SentinelBaser, self).reopen(**kwa)
+        super(AppBaser, self).reopen(**kwa)
 
         # Most recent watched events
-        self.watched_poll = subing.CesrSuber(
-            db=self, subkey="watched.", klas=core.Dater
+        self.file_state = subing.CesrSuber(
+            db=self, subkey="file_state.", klas=core.Number, sep="^"
         )
-
-        # Most recent witness query records
-        self.witq = koming.Komer(db=self, subkey="witq.", schema=WitnessQuery)
 
         return self.env

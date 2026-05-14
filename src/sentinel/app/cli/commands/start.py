@@ -75,6 +75,14 @@ parser.add_argument(
     help="path of the log file. If not defined, logs will not be written to the file.",
 )
 parser.add_argument(
+    "--export-dir",
+    "-e",
+    action="store",
+    required=False,
+    default="/usr/local/sentinel",
+    help="Directory for exporting CESR files. Default is /usr/local/sentinel.",
+)
+parser.add_argument(
     "-V",
     "--version",
     action="version",
@@ -82,7 +90,7 @@ parser.add_argument(
     help="Prints out version of script runner.",
 )
 
-FORMAT = "%(asctime)s [watopnet] %(levelname)-8s %(message)s"
+FORMAT = "%(asctime)s [sentinel] %(levelname)-8s %(message)s"
 
 
 def launch(args):
@@ -123,13 +131,14 @@ async def async_run_sentinel(args):
 
     # Setup services
     if args.local:
-        services = sentineling.setup_local(
+        services = await sentineling.setup_local(
             name=args.name,
             alias=args.alias,
             base=args.base,
             bran=args.bran,
             uxd=args.uxd,
             port=int(args.port),
+            export_dir=args.export_dir,
         )
     else:
         services = await sentineling.setup_hk(
@@ -139,6 +148,7 @@ async def async_run_sentinel(args):
             bran=args.bran,
             uxd=args.uxd,
             port=int(args.port),
+            export_dir=args.export_dir,
         )
 
     # Start all services and collect their tasks
@@ -146,8 +156,13 @@ async def async_run_sentinel(args):
     for service in services:
         if hasattr(service, "start"):
             task = service.start()
-            tasks.append(task)
-            logger.info(f"Started service: {service.__class__.__name__}")
+
+            if isinstance(task, list):
+                tasks.extend(task)
+            else:
+                tasks.append(task)
+                logger.info(f"Started service: {service.__class__.__name__}")
+
         else:
             logger.warning(
                 f"Service {service.__class__.__name__} does not have a start() method"
@@ -192,7 +207,7 @@ async def async_run_sentinel(args):
         # Stop all services on error
         for service in services:
             if hasattr(service, "stop"):
-                service.stop()
+                await service.stop()
         raise
     finally:
         # Cancel any remaining tasks
