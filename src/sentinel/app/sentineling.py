@@ -146,9 +146,7 @@ async def setup_hk(
     hby = habbing.Habery(name=name, base=base, bran=bran)
     hab = hby.habByName(alias)
     if not hab:
-        raise ValueError(
-            f"Sentinel alias '{alias}' not found in Habery '{name}'"
-        )
+        raise ValueError(f"Sentinel alias '{alias}' not found in Habery '{name}'")
 
     rgy = credentialing.Regery(hby=hby, name=name, base=base)
     db = SentinelBaser(name=name, headDirPath=base)

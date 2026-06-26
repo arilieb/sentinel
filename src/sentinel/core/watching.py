@@ -358,7 +358,9 @@ class WatchedAdjudicationPoller:
         if saas_loader is not None:
             self.credential_loader = saas_loader
         elif registrar_url:
-            self.credential_loader = CredentialLoader(hby, self.essr.hab, rgy, export_dir, registrar_url)
+            self.credential_loader = CredentialLoader(
+                hby, self.essr.hab, rgy, export_dir, registrar_url
+            )
         else:
             self.credential_loader = None
 

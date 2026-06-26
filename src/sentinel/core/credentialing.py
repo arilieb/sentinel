@@ -53,11 +53,15 @@ class SaaSCredentialLoader:
                         f"SaaSCredentialLoader: queried credentials for issuer {pre}"
                     )
                     saids = response.json().get("credentials", [])
-                    await asyncio.gather(*[self._load_credential(said) for said in saids])
+                    await asyncio.gather(
+                        *[self._load_credential(said) for said in saids]
+                    )
                     self.psr.kvy.processEscrows()
                     self.rgy.tvy.processEscrows()
                     self.verifier.processEscrows()
-                    await asyncio.gather(*[self._save_credential(said) for said in saids])
+                    await asyncio.gather(
+                        *[self._save_credential(said) for said in saids]
+                    )
                     return
                 elif response.status_code == 412:
                     logger.info(
