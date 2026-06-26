@@ -244,11 +244,14 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         """Set up test fixtures"""
         self.name = "testsentinel"
         self.alias = "testalias"
+        self.server_name = "keriguard"
+        self.server_alias = "keriguard"
         self.base = "/tmp/test"
         self.bran = "testbran"
         self.port = 8080
 
     @patch("sentinel.app.sentineling.startup", create=True)
+    @patch("sentinel.app.sentineling.SaaSCredentialLoader")
     @patch("sentinel.app.sentineling.credentialing.Regery")
     @patch("sentinel.app.sentineling.sync_server_key_state", new_callable=AsyncMock)
     @patch("sentinel.app.sentineling.ObvsSocketListener")
@@ -267,6 +270,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_socket_listener_class,
         mock_sync_server,
         mock_regery_class,
+        mock_saas_loader_class,
         mock_startup,
     ):
         """Test setup_hk without uxd flag returns only poller"""
@@ -291,6 +295,9 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_essr = Mock()
         mock_api_client_class.return_value = mock_essr
 
+        mock_saas_loader = Mock()
+        mock_saas_loader_class.return_value = mock_saas_loader
+
         mock_poller = Mock()
         mock_poller_class.return_value = mock_poller
 
@@ -300,21 +307,21 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         result = await setup_hk(
             name=self.name,
             alias=self.alias,
+            server_name=self.server_name,
+            server_alias=self.server_alias,
             base=self.base,
             bran=self.bran,
             uxd=False,
             export_dir="/tmp/export",
         )
 
-        # Verify Habery initialization with sentinel_name
-        sentinel_name = f"{self.name}-sentinel"
+        # Verify Habery initialization with name directly
         mock_habery_class.assert_called_once_with(
-            name=sentinel_name, base=self.base, bran=self.bran
+            name=self.name, base=self.base, bran=self.bran
         )
 
-        # Verify habByName called with sentinel_alias
-        sentinel_alias = f"{self.alias}-sentinel"
-        mock_hby.habByName.assert_called_once_with(sentinel_alias)
+        # Verify habByName called with alias directly
+        mock_hby.habByName.assert_called_once_with(self.alias)
 
         # Verify SentinelBaser initialization
         mock_baser_class.assert_called_once_with(name=self.name, headDirPath=self.base)
@@ -330,12 +337,21 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
             hab=mock_hab,
         )
 
-        # Verify sync_server_key_state was called
+        # Verify sync_server_key_state was called with server_name/server_alias
         mock_sync_server.assert_called_once_with(
-            self.name, self.alias, self.base, self.bran, mock_essr
+            self.server_name, self.server_alias, self.base, self.bran, mock_essr
         )
 
-        # Verify WatchedAdjudicationPoller initialization
+        # Verify SaaSCredentialLoader initialization
+        mock_saas_loader_class.assert_called_once_with(
+            hby=mock_hby,
+            hab=mock_hab,
+            rgy=mock_rgy,
+            export_dir="/tmp/export",
+            essr=mock_essr,
+        )
+
+        # Verify WatchedAdjudicationPoller initialization with saas_loader
         mock_poller_class.assert_called_once_with(
             hby=mock_hby,
             rgy=mock_rgy,
@@ -343,7 +359,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
             db=mock_db,
             poll_interval=15.0,
             export_dir="/tmp/export",
-            registrar_url=None,
+            saas_loader=mock_saas_loader,
         )
 
         # Verify ObvsSocketListener was NOT created
@@ -355,6 +371,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[0], mock_poller)
 
     @patch("sentinel.app.sentineling.startup", create=True)
+    @patch("sentinel.app.sentineling.SaaSCredentialLoader")
     @patch("sentinel.app.sentineling.credentialing.Regery")
     @patch("sentinel.app.sentineling.sync_server_key_state", new_callable=AsyncMock)
     @patch("sentinel.app.sentineling.ObvsSocketListener")
@@ -373,6 +390,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_socket_listener_class,
         mock_sync_server,
         mock_regery_class,
+        mock_saas_loader_class,
         mock_startup,
     ):
         """Test setup_hk with uxd flag returns both poller and socket listener"""
@@ -397,6 +415,9 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_essr = Mock()
         mock_api_client_class.return_value = mock_essr
 
+        mock_saas_loader = Mock()
+        mock_saas_loader_class.return_value = mock_saas_loader
+
         mock_poller = Mock()
         mock_poller_class.return_value = mock_poller
 
@@ -409,21 +430,21 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         result = await setup_hk(
             name=self.name,
             alias=self.alias,
+            server_name=self.server_name,
+            server_alias=self.server_alias,
             base=self.base,
             bran=self.bran,
             uxd=True,
             export_dir="/tmp/export",
         )
 
-        # Verify Habery initialization with sentinel_name
-        sentinel_name = f"{self.name}-sentinel"
+        # Verify Habery initialization with name directly
         mock_habery_class.assert_called_once_with(
-            name=sentinel_name, base=self.base, bran=self.bran
+            name=self.name, base=self.base, bran=self.bran
         )
 
-        # Verify habByName called with sentinel_alias
-        sentinel_alias = f"{self.alias}-sentinel"
-        mock_hby.habByName.assert_called_once_with(sentinel_alias)
+        # Verify habByName called with alias directly
+        mock_hby.habByName.assert_called_once_with(self.alias)
 
         # Verify SentinelBaser initialization
         mock_baser_class.assert_called_once_with(name=self.name, headDirPath=self.base)
@@ -439,12 +460,12 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
             hab=mock_hab,
         )
 
-        # Verify sync_server_key_state was called
+        # Verify sync_server_key_state was called with server_name/server_alias
         mock_sync_server.assert_called_once_with(
-            self.name, self.alias, self.base, self.bran, mock_essr
+            self.server_name, self.server_alias, self.base, self.bran, mock_essr
         )
 
-        # Verify WatchedAdjudicationPoller initialization
+        # Verify WatchedAdjudicationPoller initialization with saas_loader
         mock_poller_class.assert_called_once_with(
             hby=mock_hby,
             rgy=mock_rgy,
@@ -452,10 +473,10 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
             db=mock_db,
             poll_interval=15.0,
             export_dir="/tmp/export",
-            registrar_url=None,
+            saas_loader=mock_saas_loader,
         )
 
-        # Verify ObvsSocketListener initialization with correct socket path
+        # Verify ObvsSocketListener initialization (no longer receives registrar_url)
         expected_socket_path = f"/tmp/sentinel_{mock_hab.pre}.sock"
         mock_socket_listener_class.assert_called_once_with(
             hby=mock_hby,
@@ -463,7 +484,6 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
             db=mock_db,
             socket_path=expected_socket_path,
             poll_interval=0.5,
-            registrar_url=None,
             export_dir="/tmp/export",
         )
 
@@ -474,6 +494,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[1], mock_socket_listener)
 
     @patch("sentinel.app.sentineling.startup", create=True)
+    @patch("sentinel.app.sentineling.SaaSCredentialLoader")
     @patch("sentinel.app.sentineling.credentialing.Regery")
     @patch("sentinel.app.sentineling.sync_server_key_state", new_callable=AsyncMock)
     @patch("sentinel.app.sentineling.ObvsSocketListener")
@@ -492,6 +513,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_socket_listener_class,
         mock_sync_server,
         mock_regery_class,
+        mock_saas_loader_class,
         mock_startup,
     ):
         """Test setup_hk raises ValueError when alias is not found"""
@@ -505,6 +527,8 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
             await setup_hk(
                 name=self.name,
                 alias=self.alias,
+                server_name=self.server_name,
+                server_alias=self.server_alias,
                 base=self.base,
                 bran=self.bran,
                 uxd=False,
@@ -514,12 +538,11 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         # Verify error message (updated to match new code)
         self.assertEqual(
             str(context.exception),
-            f"Sentinel alias for '{self.alias}' not found in sentinel Habery '{self.name}'",
+            f"Sentinel alias '{self.alias}' not found in Habery '{self.name}'",
         )
 
-        # Verify habByName was called with sentinel_alias
-        sentinel_alias = f"{self.alias}-sentinel"
-        mock_hby.habByName.assert_called_once_with(sentinel_alias)
+        # Verify habByName was called with alias directly
+        mock_hby.habByName.assert_called_once_with(self.alias)
 
         # Verify subsequent initialization was not called
         mock_baser_class.assert_not_called()
@@ -530,6 +553,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_socket_listener_class.assert_not_called()
 
     @patch("sentinel.app.sentineling.startup", create=True)
+    @patch("sentinel.app.sentineling.SaaSCredentialLoader")
     @patch("sentinel.app.sentineling.credentialing.Regery")
     @patch("sentinel.app.sentineling.sync_server_key_state", new_callable=AsyncMock)
     @patch("sentinel.app.sentineling.ObvsSocketListener")
@@ -548,6 +572,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_socket_listener_class,
         mock_sync_server,
         mock_regery_class,
+        mock_saas_loader_class,
         mock_startup,
     ):
         """Test that socket path uses hab.pre instead of name parameter"""
@@ -572,6 +597,9 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_essr = Mock()
         mock_api_client_class.return_value = mock_essr
 
+        mock_saas_loader = Mock()
+        mock_saas_loader_class.return_value = mock_saas_loader
+
         mock_poller = Mock()
         mock_poller_class.return_value = mock_poller
 
@@ -584,6 +612,8 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         await setup_hk(
             name="different_name",
             alias=self.alias,
+            server_name=self.server_name,
+            server_alias=self.server_alias,
             base=self.base,
             bran=self.bran,
             uxd=True,
@@ -597,6 +627,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs["socket_path"], expected_socket_path)
 
     @patch("sentinel.app.sentineling.startup", create=True)
+    @patch("sentinel.app.sentineling.SaaSCredentialLoader")
     @patch("sentinel.app.sentineling.credentialing.Regery")
     @patch("sentinel.app.sentineling.sync_server_key_state", new_callable=AsyncMock)
     @patch("sentinel.app.sentineling.ObvsSocketListener")
@@ -615,6 +646,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_socket_listener_class,
         mock_sync_server,
         mock_regery_class,
+        mock_saas_loader_class,
         mock_startup,
     ):
         """Test that setup_hk returns a list"""
@@ -639,6 +671,9 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_essr = Mock()
         mock_api_client_class.return_value = mock_essr
 
+        mock_saas_loader = Mock()
+        mock_saas_loader_class.return_value = mock_saas_loader
+
         mock_poller = Mock()
         mock_poller_class.return_value = mock_poller
 
@@ -648,6 +683,8 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         result = await setup_hk(
             name=self.name,
             alias=self.alias,
+            server_name=self.server_name,
+            server_alias=self.server_alias,
             base=self.base,
             bran=self.bran,
             uxd=False,
