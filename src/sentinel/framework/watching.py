@@ -6,8 +6,10 @@ Provides polling-based file watching for KEL/TEL/Credential exports.
 
 import asyncio
 import logging
+import os
 import socket
 from pathlib import Path
+from typing import Optional
 
 from keri.app.habbing import Habery, Hab
 from keri.core import coring, parsing
@@ -44,6 +46,7 @@ class FileWatchingService:
         hby=None,
         rgy=None,
         db=None,
+        heartbeat_path: Optional[str] = None,
     ):
         """
         Initialize FileWatchingService.
@@ -54,6 +57,9 @@ class FileWatchingService:
             hby: Optional Habery instance for KERI operations
             rgy: Optional Regery instance for credentialing operations
             db: Optional database instance
+            heartbeat_path: Optional path to touch after each poll cycle that
+                completes without exception (liveness signal; default: None,
+                heartbeat disabled)
         """
         self.export_dir = Path(export_dir)
         self.poll_interval = poll_interval
@@ -62,6 +68,7 @@ class FileWatchingService:
         self.tvy = Tevery(db=self.hby.db, reger=self.rgy.reger, lax=True, local=True)
         self.verifier = verifying.Verifier(hby=self.hby, reger=self.rgy.reger)
         self.db = db
+        self.heartbeat_path = heartbeat_path
         self.registry = get_registry()
         self._task = None
         self._running = False
@@ -116,6 +123,9 @@ class FileWatchingService:
                         continue
 
                     await self._scan_directory(event_type, watch_dir)
+
+                if self.heartbeat_path:
+                    Path(self.heartbeat_path).touch()
 
             except asyncio.CancelledError:
                 logger.info("FileWatchingService: Task cancelled")
@@ -232,7 +242,7 @@ class LocalWatcherConnector:
     to add AIDs to the watch list.
     """
 
-    def __init__(self, hby: Habery, hab: Hab, watcher: str):
+    def __init__(self, hby: Habery, hab: Hab, watcher: str, socket_dir: str = "/tmp"):
         """
         Initialize LocalWatcher with KERI context.
 
@@ -240,6 +250,8 @@ class LocalWatcherConnector:
             hby: Habery instance for KERI keystore management
             hab: Hab instance representing the server's identity
             watcher: The AID (Autonomic Identifier) of the watcher service
+            socket_dir: Directory containing the sentinel's unix domain
+                socket (default: /tmp)
 
         """
         self.hby = hby
@@ -247,7 +259,7 @@ class LocalWatcherConnector:
         self.watcher = watcher
 
         # Socket path based on server's AID prefix
-        self.socket_path = f"/tmp/sentinel_{watcher}.sock"
+        self.socket_path = os.path.join(socket_dir, f"sentinel_{watcher}.sock")
 
     def watch(self, aid: str, oobi) -> bytes:
         """

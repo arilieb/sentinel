@@ -7,7 +7,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock
-from sentinel.framework.watching import FileWatchingService
+from sentinel.framework.watching import FileWatchingService, LocalWatcherConnector
 from sentinel.framework.handlers import EventHandler
 from sentinel.framework.events import KELEvent, TELEvent, CredentialEvent
 from sentinel.framework.registry import register_handler, get_registry
@@ -98,6 +98,20 @@ def handler():
     registry._handlers = set()
 
 
+class TestLocalWatcherConnector:
+    """Test LocalWatcherConnector socket path composition"""
+
+    def test_default_socket_dir_is_tmp(self):
+        connector = LocalWatcherConnector(Mock(), Mock(), "EWatcherAID123")
+        assert connector.socket_path == "/tmp/sentinel_EWatcherAID123.sock"
+
+    def test_custom_socket_dir(self, tmp_path):
+        connector = LocalWatcherConnector(
+            Mock(), Mock(), "EWatcherAID123", socket_dir=str(tmp_path)
+        )
+        assert connector.socket_path == str(tmp_path / "sentinel_EWatcherAID123.sock")
+
+
 class TestFileWatchingService:
     """Test FileWatchingService"""
 
@@ -127,6 +141,44 @@ class TestFileWatchingService:
         assert "credential" in service.watch_dirs
         assert service.watch_dirs["kel"] == temp_export_dir / "kel"
         assert service.watch_dirs["credential"] == temp_export_dir / "credential"
+
+    def test_heartbeat_path_defaults_to_none(
+        self, temp_export_dir, mock_db, mock_hby, mock_rgy
+    ):
+        """Test heartbeat is disabled unless a path is given"""
+        service = FileWatchingService(
+            export_dir=str(temp_export_dir),
+            hby=mock_hby,
+            rgy=mock_rgy,
+            db=mock_db,
+        )
+        assert service.heartbeat_path is None
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_touched_after_poll_cycle(
+        self, temp_export_dir, handler, mock_db, mock_hby, mock_rgy
+    ):
+        """Test the heartbeat file is touched after each successful poll cycle"""
+        heartbeat_path = temp_export_dir / "guardian.heartbeat"
+
+        service = FileWatchingService(
+            export_dir=str(temp_export_dir),
+            poll_interval=0.1,
+            hby=mock_hby,
+            rgy=mock_rgy,
+            db=mock_db,
+            heartbeat_path=str(heartbeat_path),
+        )
+
+        task = service.start()
+        await asyncio.sleep(0.3)
+        service.stop()
+        try:
+            await asyncio.wait_for(task, timeout=1.0)
+        except asyncio.TimeoutError:
+            task.cancel()
+
+        assert heartbeat_path.exists()
 
     @pytest.mark.asyncio
     async def test_detect_new_kel_file(
