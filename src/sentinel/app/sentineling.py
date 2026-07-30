@@ -5,7 +5,7 @@ sentinel.app.sentineling module
 """
 
 import os
-from typing import List, Optional
+from typing import List
 
 from kept.hk.configing import HealthKERIConfig
 from kept.hk.essring import APIClient
@@ -35,7 +35,6 @@ async def setup_local(
     export_dir: str = "/usr/local/sentinel",
     registrar_url: str | None = None,
     socket_dir: str = "/tmp",
-    head_dir_path: Optional[str] = None,
 ) -> List:
     """
     Setup sentinel watcher configuration for KERI local watching.
@@ -51,8 +50,6 @@ async def setup_local(
         export_dir: Directory for exporting CESR files (default: /usr/local/sentinel)
         registrar_url: URL for Registrar if available
         socket_dir: Directory containing the uxd listener's socket (default: /tmp)
-        head_dir_path: Absolute override for the KERI keystore/db head directory
-            (default: None, preserving existing default location)
 
     Returns:
         List: A list of configured services for the sentinel instance
@@ -63,7 +60,7 @@ async def setup_local(
     services = list()
 
     # Create Habery for managing identifiers
-    hby = habbing.Habery(name=name, base=base, bran=bran, headDirPath=head_dir_path)
+    hby = habbing.Habery(name=name, base=base, bran=bran)
     hab = hby.habByName(alias)
     if hab is None:
         hab = hby.makeHab(name=alias, transferable=False)
@@ -74,7 +71,7 @@ async def setup_local(
     rgy = credentialing.Regery(hby=hby, name=name, base=base)
 
     # Create database for watcher-specific data
-    db = SentinelBaser(name=name, headDirPath=head_dir_path or base)
+    db = SentinelBaser(name=name, headDirPath=base)
 
     # Create local Watcher for direct witness querying
     watcher = Watcher(
@@ -127,7 +124,6 @@ async def setup_hk(
     export_dir: str,
     registrar_url: str | None = None,
     socket_dir: str = "/tmp",
-    head_dir_path: Optional[str] = None,
 ) -> List:
     """
     Setup sentinel watcher configuration for healthKERI SaaS mode.
@@ -141,21 +137,19 @@ async def setup_hk(
         export_dir: Directory for exporting CESR credential files
         registrar_url: Unused in SaaS mode; kept for call-site compatibility
         socket_dir: Directory containing the uxd listener's socket (default: /tmp)
-        head_dir_path: Absolute override for the KERI keystore/db head directory
-            (default: None, preserving existing default location)
 
     Returns:
         List: Configured services for the sentinel instance
 
     """
     services = list()
-    hby = habbing.Habery(name=name, base=base, bran=bran, headDirPath=head_dir_path)
+    hby = habbing.Habery(name=name, base=base, bran=bran)
     hab = hby.habByName(alias)
     if not hab:
         raise ValueError(f"Sentinel alias '{alias}' not found in Habery '{name}'")
 
     rgy = credentialing.Regery(hby=hby, name=name, base=base)
-    db = SentinelBaser(name=name, headDirPath=head_dir_path or base)
+    db = SentinelBaser(name=name, headDirPath=base)
 
     config = HealthKERIConfig.get_instance()
     logger.info(

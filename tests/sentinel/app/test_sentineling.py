@@ -313,7 +313,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
 
         # Verify Habery initialization with name directly
         mock_habery_class.assert_called_once_with(
-            name=self.name, base=self.base, bran=self.bran, headDirPath=None
+            name=self.name, base=self.base, bran=self.bran
         )
 
         # Verify habByName called with alias directly
@@ -427,7 +427,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
 
         # Verify Habery initialization with name directly
         mock_habery_class.assert_called_once_with(
-            name=self.name, base=self.base, bran=self.bran, headDirPath=None
+            name=self.name, base=self.base, bran=self.bran
         )
 
         # Verify habByName called with alias directly
@@ -484,7 +484,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
     @patch("sentinel.app.sentineling.HealthKERIConfig")
     @patch("sentinel.app.sentineling.SentinelBaser")
     @patch("sentinel.app.sentineling.habbing.Habery")
-    async def test_setup_hk_with_socket_dir_and_data_dir(
+    async def test_setup_hk_with_socket_dir(
         self,
         mock_habery_class,
         mock_baser_class,
@@ -496,7 +496,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         mock_saas_loader_class,
         mock_startup,
     ):
-        """Test setup_hk honors socket_dir and head_dir_path overrides"""
+        """Test setup_hk honors the socket_dir override"""
         mock_hab = Mock()
         mock_hab.pre = "ETestAIDPrefix123"
         mock_hby = Mock()
@@ -518,20 +518,11 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
             uxd=True,
             export_dir="/tmp/export",
             socket_dir="/custom/socket/dir",
-            head_dir_path="/custom/data/dir",
         )
 
-        # Habery reopens the provisioned data dir via headDirPath
+        # Habery is unaffected by the socket_dir override
         mock_habery_class.assert_called_once_with(
-            name=self.name,
-            base=self.base,
-            bran=self.bran,
-            headDirPath="/custom/data/dir",
-        )
-
-        # head_dir_path overrides the base-as-headDirPath fallback
-        mock_baser_class.assert_called_once_with(
-            name=self.name, headDirPath="/custom/data/dir"
+            name=self.name, base=self.base, bran=self.bran
         )
 
         # Socket listens under the custom socket_dir, not /tmp

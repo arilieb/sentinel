@@ -37,7 +37,6 @@ class TestPasscodeFilePrecedence(unittest.TestCase):
             bran=None,
             passcode_file=None,
             base="",
-            data_dir=None,
             socket_dir="/tmp",
             local=True,
             uxd=False,
@@ -97,7 +96,6 @@ class TestParserFlags(unittest.TestCase):
     def test_new_flags_present_with_defaults(self):
         args = parser.parse_args(["--name", "n", "--alias", "a", "--local"])
         self.assertIsNone(args.passcode_file)
-        self.assertIsNone(args.data_dir)
         self.assertEqual(args.socket_dir, "/tmp")
 
 

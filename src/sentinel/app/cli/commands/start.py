@@ -50,13 +50,6 @@ parser.add_argument(
     default="",
 )
 parser.add_argument(
-    "--data-dir",
-    help="absolute override for the KERI keystore/db head directory "
-    "(default: unset, preserving the existing default location)",
-    required=False,
-    default=None,
-)
-parser.add_argument(
     "--socket-dir",
     help="directory for the uxd listener's unix domain socket",
     required=False,
@@ -266,7 +259,6 @@ async def async_run_sentinel(args):
             export_dir=args.export_dir,
             registrar_url=args.registrar_url,
             socket_dir=args.socket_dir,
-            head_dir_path=args.data_dir,
         )
     else:
         services = await sentineling.setup_hk(
@@ -278,7 +270,6 @@ async def async_run_sentinel(args):
             export_dir=args.export_dir,
             registrar_url=args.registrar_url,
             socket_dir=args.socket_dir,
-            head_dir_path=args.data_dir,
         )
 
     # Start all services and collect their tasks
