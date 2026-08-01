@@ -18,6 +18,7 @@ from sentinel.core.oobiing import Oobiery
 from sentinel.core.watching import WatchedAdjudicationPoller, ObvsSocketListener
 from sentinel.core.witnessing import LocalSocketListener
 from sentinel.db.basing import SentinelBaser
+from sentinel.framework.watching import sentinel_socket_filename
 
 logger = help.ogler.getLogger()
 
@@ -106,7 +107,7 @@ async def setup_local(
 
     # Optional: Unix domain socket listener for real-time updates
     if uxd:
-        socket_path = os.path.join(socket_dir, f"sentinel_{hab.pre}.sock")
+        socket_path = os.path.join(socket_dir, sentinel_socket_filename(hab.pre))
         socket_listener = LocalSocketListener(
             hby=hby, watcher=watcher, db=db, socket_path=socket_path, poll_interval=0.5
         )
@@ -188,7 +189,7 @@ async def setup_hk(
     )
 
     if uxd:
-        socket_path = os.path.join(socket_dir, f"sentinel_{hab.pre}.sock")
+        socket_path = os.path.join(socket_dir, sentinel_socket_filename(hab.pre))
         socket_listener = ObvsSocketListener(
             hby=hby,
             essr=essr,

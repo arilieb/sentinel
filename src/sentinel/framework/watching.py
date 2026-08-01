@@ -21,6 +21,26 @@ from sentinel.framework.registry import get_registry
 
 logger = logging.getLogger(__name__)
 
+# Number of leading characters of a KERI AID prefix used to build the
+# sentinel unix domain socket filename. AID prefixes are self-addressing/
+# self-certifying (already high-entropy), so a short prefix is more than
+# enough to disambiguate the handful of sentinel sockets that ever coexist
+# in one socket_dir. Kept short because sockaddr_un.sun_path is limited to
+# 104 bytes on macOS/BSD (108 on Linux) and socket_dir on macOS is nested
+# under `~/Library/Application Support/KERIGuard/sentinel/`, leaving little
+# room for the filename itself.
+SENTINEL_SOCKET_AID_LEN = 8
+
+
+def sentinel_socket_filename(aid: str) -> str:
+    """Build the sentinel unix domain socket filename for an AID.
+
+    Shared by the client (`LocalWatcherConnector`) and both server-side
+    setup paths (`sentineling.setup_local`/`setup_hk`) so the three sites
+    stay in lockstep.
+    """
+    return f"sentinel_{aid[-SENTINEL_SOCKET_AID_LEN:]}.sock"
+
 
 class FileWatchingService:
     """
@@ -259,7 +279,7 @@ class LocalWatcherConnector:
         self.watcher = watcher
 
         # Socket path based on server's AID prefix
-        self.socket_path = os.path.join(socket_dir, f"sentinel_{watcher}.sock")
+        self.socket_path = os.path.join(socket_dir, sentinel_socket_filename(watcher))
 
     def watch(self, aid: str, oobi) -> bytes:
         """

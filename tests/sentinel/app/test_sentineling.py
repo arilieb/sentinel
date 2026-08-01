@@ -159,7 +159,7 @@ class TestSetupLocal(unittest.IsolatedAsyncioTestCase):
             )
 
             # Verify LocalSocketListener was created
-            expected_socket_path = f"/tmp/sentinel_{mock_hab.pre}.sock"
+            expected_socket_path = f"/tmp/sentinel_{mock_hab.pre[-8:]}.sock"
             mock_socket_listener_class.assert_called_once_with(
                 hby=mock_hby,
                 watcher=mock_watcher,
@@ -459,7 +459,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         )
 
         # Verify ObvsSocketListener initialization (no longer receives registrar_url)
-        expected_socket_path = f"/tmp/sentinel_{mock_hab.pre}.sock"
+        expected_socket_path = f"/tmp/sentinel_{mock_hab.pre[-8:]}.sock"
         mock_socket_listener_class.assert_called_once_with(
             hby=mock_hby,
             essr=mock_essr,
@@ -526,7 +526,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         )
 
         # Socket listens under the custom socket_dir, not /tmp
-        expected_socket_path = f"/custom/socket/dir/sentinel_{mock_hab.pre}.sock"
+        expected_socket_path = f"/custom/socket/dir/sentinel_{mock_hab.pre[-8:]}.sock"
         call_kwargs = mock_socket_listener_class.call_args[1]
         self.assertEqual(call_kwargs["socket_path"], expected_socket_path)
 
@@ -649,7 +649,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         )
 
         # Verify socket path uses hab.pre, not name
-        expected_socket_path = "/tmp/sentinel_ECustomPrefix456.sock"
+        expected_socket_path = "/tmp/sentinel_refix456.sock"
         mock_socket_listener_class.assert_called_once()
         call_kwargs = mock_socket_listener_class.call_args[1]
         self.assertEqual(call_kwargs["socket_path"], expected_socket_path)

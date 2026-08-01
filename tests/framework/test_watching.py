@@ -103,13 +103,13 @@ class TestLocalWatcherConnector:
 
     def test_default_socket_dir_is_tmp(self):
         connector = LocalWatcherConnector(Mock(), Mock(), "EWatcherAID123")
-        assert connector.socket_path == "/tmp/sentinel_EWatcherAID123.sock"
+        assert connector.socket_path == "/tmp/sentinel_erAID123.sock"
 
     def test_custom_socket_dir(self, tmp_path):
         connector = LocalWatcherConnector(
             Mock(), Mock(), "EWatcherAID123", socket_dir=str(tmp_path)
         )
-        assert connector.socket_path == str(tmp_path / "sentinel_EWatcherAID123.sock")
+        assert connector.socket_path == str(tmp_path / "sentinel_erAID123.sock")
 
 
 class TestFileWatchingService:
