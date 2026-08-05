@@ -356,10 +356,10 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         # Verify ObvsSocketListener was NOT created
         mock_socket_listener_class.assert_not_called()
 
-        # Verify result contains only poller
+        # Verify result contains oobiery, escrower, and poller (no socket listener)
         self.assertIsInstance(result, list)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0], mock_poller)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[2], mock_poller)
 
     @patch("sentinel.app.sentineling.startup", create=True)
     @patch("sentinel.app.sentineling.SaaSCredentialLoader")
@@ -469,11 +469,11 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
             export_dir="/tmp/export",
         )
 
-        # Verify result contains both services
+        # Verify result contains oobiery, escrower, poller, and socket listener
         self.assertIsInstance(result, list)
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[0], mock_poller)
-        self.assertEqual(result[1], mock_socket_listener)
+        self.assertEqual(len(result), 4)
+        self.assertEqual(result[2], mock_poller)
+        self.assertEqual(result[3], mock_socket_listener)
 
     @patch("sentinel.app.sentineling.startup", create=True)
     @patch("sentinel.app.sentineling.SaaSCredentialLoader")

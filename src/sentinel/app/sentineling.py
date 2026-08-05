@@ -16,7 +16,7 @@ from keri.vdr import credentialing
 from sentinel.core.credentialing import SaaSCredentialLoader
 from sentinel.core.oobiing import Oobiery
 from sentinel.core.watching import WatchedAdjudicationPoller, ObvsSocketListener
-from sentinel.core.witnessing import LocalSocketListener
+from sentinel.core.witnessing import LocalSocketListener, Escrower
 from sentinel.db.basing import SentinelBaser
 from sentinel.framework.watching import sentinel_socket_filename
 
@@ -161,6 +161,19 @@ async def setup_hk(
     saas_loader = SaaSCredentialLoader(
         hby=hby, hab=hab, rgy=rgy, export_dir=export_dir, essr=essr
     )
+
+    # OOBI resolution + escrow reprocessing, mirroring setup_local's Watcher
+    # (witnessing.py). Without these, any reply the sentinel receives whose
+    # signer's key state (or an OOBI recorded via db.oobis, e.g. from a
+    # `/watcher/.../add` registration) isn't yet locally known escrows
+    # permanently -- nothing in setup_hk previously resolved OOBIs or
+    # retried escrows, so `hby.kevers` could never gain the issuer's kever
+    # and `WatchedAdjudicationPoller` would skip every adjudication for it.
+    oobiery = Oobiery(hby=hby, rvy=hby.rvy)
+    services.append(oobiery)
+
+    escrower = Escrower(kvy=hby.kvy, rvy=hby.rvy, tvy=None, exc=None)
+    services.append(escrower)
 
     poller = WatchedAdjudicationPoller(
         hby=hby,
