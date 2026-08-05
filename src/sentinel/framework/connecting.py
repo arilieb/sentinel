@@ -4,6 +4,7 @@ import stat
 from os import mkdir
 from os.path import exists
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pyotp
 import requests
@@ -98,6 +99,26 @@ async def connect_to_healthkeri(
         print("Witness authenticated, now rotating...")
         await rotate_witness(server_hby, server_hab, witness_aid, otp)
         print("Witness rotation complete.")
+
+        # `witness_oobi` (above) resolves the *witness's own* identity -- it
+        # has cid=witness_aid, not cid=server_hab.pre, so resolving it alone
+        # into a caller's Habery does not populate that Habery's kevers with
+        # the guardian's own KEL (`load_oobi`'s `aid not in hby.kevers` check
+        # would fail). Build the witness-mediated OOBI for the guardian AID
+        # itself (`/oobi/{cid}/witness/{eid}`, matching `keri.end.ending.OOBI_RE`)
+        # from the same witness host, so callers can resolve *this* one into
+        # the vault's own `hby` to actually watch/query the guardian AID.
+        parsed = urlparse(witness_oobi)
+        guardian_oobi = f"{parsed.scheme}://{parsed.netloc}/oobi/{server_hab.pre}/witness/{witness_aid}"
+
+        return {
+            "witness_aid": witness_aid,
+            "witness_name": witness_name,
+            "witness_oobi": witness_oobi,
+            "guardian_oobi": guardian_oobi,
+        }
+
+    return {}
 
 
 async def reserve_witness_for_server(essr, server_name, server_hab):
