@@ -322,13 +322,15 @@ class TestAddWatchedIdentifier(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["success"])
 
     async def test_add_watched_identifier_not_in_kevers(self):
-        """Test add when identifier not found in kevers"""
+        """Test add when identifier not found in kevers and no resolver
+        (neither registrar_url nor essr) is available"""
         self.mock_hby.kevers = {}
 
-        # Call function
+        # Call function with no essr and no registrar_url -- nothing available
+        # to resolve the identifier with.
         result = await add_watched_identifier(
             hby=self.mock_hby,
-            essr=self.mock_essr,
+            essr=None,
             watched_aid=self.watched_aid,
             alias=self.alias,
         )
@@ -591,12 +593,108 @@ class TestAddWatchedIdentifier(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["success"])
         self.assertIn("Network error fetching OOBI from registrar", result["error"])
 
-    async def test_add_watched_identifier_no_registrar_url(self):
-        """Test fallback when no registrar_url provided"""
+    async def test_add_watched_identifier_essr_fallback_success(self):
+        """Test successful OOBI resolution via ESSR when no registrar_url is
+        available (healthKERI SaaS mode) -- essr should be used as the
+        resolver instead of the plain-HTTP registrar_url path."""
+        # Setup mocks - watched_aid NOT in kevers initially
+        self.mock_hby.kevers = {}
+
+        # Setup kever that will be added after OOBI resolution
+        mock_kever = Mock()
+        mock_kever.wits = ["EWitness123"]
+        mock_serder = Mock()
+        mock_serder.pre = self.watched_aid
+        mock_kever.serder = mock_serder
+
+        # Setup witness location
+        mock_loc = Mock()
+        mock_loc.url = "https://witness.example.com"
+        self.mock_hby.db.locs.getItemIter = Mock(
+            return_value=[(("EWitness123", "https"), mock_loc)]
+        )
+
+        # Setup psr and kvy for parsing
+        self.mock_hby.psr = Mock()
+        self.mock_hby.psr.parse = Mock()
+        self.mock_hby.kvy = Mock()
+        self.mock_hby.kvy.processEscrows = Mock()
+        self.mock_hby.rvy = Mock()
+        self.mock_hby.rvy.processEscrowReply = Mock()
+
+        # Mock the ESSR OOBI response
+        mock_oobi_response = Mock()
+        mock_oobi_response.status_code = 200
+        mock_oobi_response.content = b"mock_oobi_data"
+
+        # Mock the final /watched registration POST response
+        mock_watched_response = Mock()
+        mock_watched_response.status_code = 201
+        mock_watched_response.text = "Created"
+
+        # First essr.request call resolves the OOBI (inside
+        # resolve_identifier_via_essr); the retried add_watched_identifier
+        # call then makes a second essr.request call to register /watched.
+        self.mock_essr.request = AsyncMock(
+            side_effect=[mock_oobi_response, mock_watched_response]
+        )
+
+        with patch(
+            "sentinel.core.watching.filing.export_kel", new_callable=AsyncMock
+        ) as mock_export:
+            mock_export.return_value = True
+
+            # After parse is called, add kever to mock_hby.kevers
+            def add_kever_after_parse(data):
+                self.mock_hby.kevers[self.watched_aid] = mock_kever
+
+            self.mock_hby.psr.parse.side_effect = add_kever_after_parse
+
+            with patch(
+                "sentinel.core.watching.random.choice", return_value="EWitness123"
+            ):
+                with patch("sentinel.core.watching.kering.Schemes") as mock_schemes:
+                    mock_schemes.https = "https"
+                    mock_schemes.http = "http"
+
+                    # Call function without registrar_url -- essr should be
+                    # used as the fallback resolver.
+                    result = await add_watched_identifier(
+                        hby=self.mock_hby,
+                        essr=self.mock_essr,
+                        watched_aid=self.watched_aid,
+                        alias=self.alias,
+                        export_dir="/tmp/test",
+                    )
+
+            # Verify the ESSR OOBI fetch was made against /registrar/oobi/{aid}
+            first_call_kwargs = self.mock_essr.request.call_args_list[0][1]
+            self.assertEqual(
+                first_call_kwargs["path"], f"/registrar/oobi/{self.watched_aid}"
+            )
+            self.assertEqual(first_call_kwargs["method"], "GET")
+
+            # Verify parse was called with the fetched OOBI bytes
+            self.mock_hby.psr.parse.assert_called_once_with(b"mock_oobi_data")
+
+            # Verify export was called
+            mock_export.assert_called_once_with(
+                hby=self.mock_hby, aid=self.watched_aid, export_dir="/tmp/test"
+            )
+
+        # Verify result
+        self.assertTrue(result["success"])
+
+    async def test_add_watched_identifier_essr_resolution_404(self):
+        """Test ESSR OOBI resolution with 404 from the registrar API"""
         # Setup mocks - watched_aid NOT in kevers
         self.mock_hby.kevers = {}
 
-        # Call function without registrar_url
+        mock_oobi_response = Mock()
+        mock_oobi_response.status_code = 404
+        self.mock_essr.request = AsyncMock(return_value=mock_oobi_response)
+
+        # Call function without registrar_url -- essr fallback should be used
         result = await add_watched_identifier(
             hby=self.mock_hby,
             essr=self.mock_essr,
@@ -606,7 +704,80 @@ class TestAddWatchedIdentifier(unittest.IsolatedAsyncioTestCase):
 
         # Verify error result
         self.assertFalse(result["success"])
-        self.assertIn("not found in KERI database", result["error"])
+        self.assertIn("not found at registrar", result["error"])
+
+    async def test_add_watched_identifier_essr_resolution_non_200(self):
+        """Test ESSR OOBI resolution with non-200 status from the registrar API"""
+        # Setup mocks - watched_aid NOT in kevers
+        self.mock_hby.kevers = {}
+
+        mock_oobi_response = Mock()
+        mock_oobi_response.status_code = 500
+        self.mock_essr.request = AsyncMock(return_value=mock_oobi_response)
+
+        # Call function without registrar_url -- essr fallback should be used
+        result = await add_watched_identifier(
+            hby=self.mock_hby,
+            essr=self.mock_essr,
+            watched_aid=self.watched_aid,
+            alias=self.alias,
+        )
+
+        # Verify error result
+        self.assertFalse(result["success"])
+        self.assertIn("Failed to fetch OOBI", result["error"])
+        self.assertIn("500", result["error"])
+
+    async def test_add_watched_identifier_essr_resolution_exception(self):
+        """Test ESSR OOBI resolution when the essr request raises"""
+        # Setup mocks - watched_aid NOT in kevers
+        self.mock_hby.kevers = {}
+
+        self.mock_essr.request = AsyncMock(side_effect=Exception("Connection error"))
+
+        # Call function without registrar_url -- essr fallback should be used
+        result = await add_watched_identifier(
+            hby=self.mock_hby,
+            essr=self.mock_essr,
+            watched_aid=self.watched_aid,
+            alias=self.alias,
+        )
+
+        # Verify error result
+        self.assertFalse(result["success"])
+        self.assertIn("Network error fetching OOBI via ESSR", result["error"])
+
+    async def test_add_watched_identifier_essr_resolution_kel_not_loaded(self):
+        """Test ESSR OOBI resolution where the fetched OOBI parses but the
+        AID still doesn't land in kevers"""
+        # Setup mocks - watched_aid NOT in kevers initially
+        self.mock_hby.kevers = {}
+
+        # Setup psr and kvy for parsing
+        self.mock_hby.psr = Mock()
+        self.mock_hby.psr.parse = Mock()
+        self.mock_hby.kvy = Mock()
+        self.mock_hby.kvy.processEscrows = Mock()
+        self.mock_hby.rvy = Mock()
+        self.mock_hby.rvy.processEscrowReply = Mock()
+
+        mock_oobi_response = Mock()
+        mock_oobi_response.status_code = 200
+        mock_oobi_response.content = b"mock_oobi_data"
+        self.mock_essr.request = AsyncMock(return_value=mock_oobi_response)
+
+        # Call function without registrar_url -- essr fallback should be
+        # used; kever is NOT added after parse
+        result = await add_watched_identifier(
+            hby=self.mock_hby,
+            essr=self.mock_essr,
+            watched_aid=self.watched_aid,
+            alias=self.alias,
+        )
+
+        # Verify error result
+        self.assertFalse(result["success"])
+        self.assertIn("could not be resolved", result["error"])
 
     async def test_add_watched_identifier_oobi_resolution_kel_not_loaded(self):
         """Test KEL not loaded after OOBI resolution"""

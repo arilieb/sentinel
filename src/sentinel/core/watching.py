@@ -222,6 +222,122 @@ async def resolve_identifier_kel(
         return {"success": False, "error": str(e)}
 
 
+async def resolve_identifier_via_essr(
+    hby,
+    essr,
+    aid: str,
+    export_dir: Optional[str] = None,
+) -> dict:
+    """
+    Resolve and load KEL for an identifier via the ESSR-authenticated
+    healthKERI registrar API, for use when no plain-HTTP registrar_url is
+    available (SaaS/healthKERI mode) -- hkweb's /registrar/oobi/{aid} route
+    sits behind signature-validation middleware, so a plain httpx GET (as
+    resolve_identifier_kel does against registrar_url) cannot reach it; the
+    caller's own essr client must be used instead.
+
+    Args:
+        hby: Habery instance
+        essr: APIClient instance for interacting with healthKERI API
+        aid: Identifier to resolve
+        export_dir: Directory to export KEL to after loading
+
+    Returns:
+        Dict with 'success' and optional 'error'
+    """
+    try:
+        # Check if identifier already in kevers
+        if aid in hby.kevers:
+            logger.debug(f"Identifier {aid} already in kevers, no resolution needed")
+            return {"success": True}
+
+        # If no essr, cannot resolve
+        if not essr:
+            logger.error(f"Identifier {aid} not in kevers and no essr client provided")
+            return {
+                "success": False,
+                "error": "Identifier not found and no ESSR client available",
+            }
+
+        logger.info(
+            f"Identifier {aid} not in kevers, attempting OOBI resolution via ESSR"
+        )
+
+        try:
+            response = await essr.request(path=f"/registrar/oobi/{aid}", method="GET")
+        except Exception as e:
+            logger.error(f"ESSR error fetching OOBI for {aid}: {e}")
+            return {
+                "success": False,
+                "error": "Network error fetching OOBI via ESSR",
+            }
+
+        if response is None:
+            logger.error(f"No response fetching OOBI for {aid} via ESSR")
+            return {
+                "success": False,
+                "error": "No response fetching OOBI via ESSR",
+            }
+
+        if response.status_code == 404:
+            logger.error(f"OOBI not found for {aid} via ESSR registrar")
+            return {
+                "success": False,
+                "error": f"Identifier {aid} not found at registrar",
+            }
+
+        if response.status_code != 200:
+            logger.error(
+                f"Failed to fetch OOBI for {aid} via ESSR: status {response.status_code}"
+            )
+            return {
+                "success": False,
+                "error": f"Failed to fetch OOBI (status {response.status_code})",
+            }
+
+        oobi_data = response.content
+        logger.debug(
+            f"Successfully fetched OOBI for {aid} via ESSR ({len(oobi_data)} bytes)"
+        )
+
+        # Parse OOBI to load KEL
+        logger.debug(f"Parsing OOBI data for {aid}")
+        hby.psr.parse(oobi_data)
+        hby.kvy.processEscrows()
+        if hasattr(hby, "rvy") and hby.rvy:
+            hby.rvy.processEscrowReply()
+
+        # Verify KEL loaded successfully
+        if aid not in hby.kevers:
+            logger.error(f"Failed to load KEL for {aid} after ESSR OOBI resolution")
+            return {
+                "success": False,
+                "error": f"Identifier {aid} could not be resolved",
+            }
+
+        logger.info(f"Successfully resolved OOBI for {aid} via ESSR")
+
+        # Export KEL to filesystem if export_dir provided
+        if export_dir:
+            try:
+                success = await filing.export_kel(
+                    hby=hby, aid=aid, export_dir=export_dir
+                )
+                if success:
+                    logger.info(f"Successfully exported KEL for {aid}")
+                else:
+                    logger.warning(f"Failed to export KEL for {aid}")
+            except Exception as e:
+                logger.error(f"Error exporting KEL for {aid}: {e}")
+                # Continue - export failure shouldn't block resolution
+
+        return {"success": True}
+
+    except Exception as e:
+        logger.error(f"Error resolving identifier KEL via ESSR for {aid}: {e}")
+        return {"success": False, "error": str(e)}
+
+
 async def add_watched_identifier(
     hby,
     essr,
@@ -242,14 +358,25 @@ async def add_watched_identifier(
 
         # Verify watched identifier is in kevers
         if watched_aid not in hby.kevers:
-            # Attempt OOBI resolution if this is first try and registrar_url provided
-            if _retry_count == 0 and registrar_url:
-                result = await resolve_identifier_kel(
-                    hby=hby,
-                    aid=watched_aid,
-                    registrar_url=registrar_url,
-                    export_dir=export_dir,
-                )
+            # Attempt OOBI resolution if this is first try and a resolver is
+            # available: registrar_url (self-hosted "registrar" mode, plain
+            # HTTP) takes precedence when present; otherwise fall back to
+            # essr (healthKERI SaaS mode, ESSR-authenticated) if given.
+            if _retry_count == 0 and (registrar_url or essr):
+                if registrar_url:
+                    result = await resolve_identifier_kel(
+                        hby=hby,
+                        aid=watched_aid,
+                        registrar_url=registrar_url,
+                        export_dir=export_dir,
+                    )
+                else:
+                    result = await resolve_identifier_via_essr(
+                        hby=hby,
+                        essr=essr,
+                        aid=watched_aid,
+                        export_dir=export_dir,
+                    )
 
                 if not result.get("success"):
                     raise ValueError(
@@ -267,7 +394,7 @@ async def add_watched_identifier(
                     _retry_count=_retry_count + 1,
                 )
             else:
-                # No registrar_url or already retried
+                # No registrar_url/essr or already retried
                 raise ValueError(
                     f"Watched identifier {watched_aid} not found in KERI database"
                 )
