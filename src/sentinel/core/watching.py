@@ -371,6 +371,17 @@ class WatchedAdjudicationPoller:
         self.query_done = True
         self._task = None
         self._running = False
+        # watched_aid -> highest remote_sn seen for it that we have not yet
+        # locally caught up to. A resync attempt can leave the newest event
+        # sitting in escrow (e.g. insufficient witness receipts at fetch
+        # time) without raising, so "we synced" and "we caught up" are not
+        # the same thing. The `/adjudications?date=...` checkpoint (see
+        # `_async_poll_adjudications`) only re-surfaces an adjudication
+        # while it's newer than the last-seen date, so once that checkpoint
+        # advances past it, an AID stuck in escrow would otherwise never be
+        # retried again. This dict keeps retrying such AIDs every poll cycle
+        # independent of whether the adjudications feed mentions them again.
+        self._pending_resync: Dict[str, int] = {}
 
     async def run(self):
         """
@@ -453,6 +464,84 @@ class WatchedAdjudicationPoller:
 
         logger.info("WatchedAdjudicationPoller: Stopped")
 
+    async def _resync_watched_identifier(
+        self, watched_aid: str, remote_sn: int, watched_name: str
+    ) -> bool:
+        """
+        Attempt to bring a single watched identifier's local KEL up to
+        `remote_sn`, export it, and trigger a credential search off the
+        actual post-sync state.
+
+        Returns True if the local KEL is caught up to (or past) `remote_sn`
+        after this attempt, False if it's still behind (e.g. the newest
+        event is sitting in escrow pending witness receipts) and should be
+        retried on a later poll cycle.
+        """
+        kever = self.hby.kevers[watched_aid]
+
+        await remoting.sync_watched_identifier(self.hby, self.essr, kever.serder.pre)
+
+        # Export KEL to filesystem
+        try:
+            await filing.export_kel(
+                hby=self.hby,
+                aid=kever.serder.pre,
+                export_dir=self.export_dir,
+            )
+        except Exception as e:
+            logger.exception(
+                f"WatchedAdjudicationPoller: Failed to export KEL for {watched_name}: {e}"
+            )
+
+        # Re-read post-sync: `sync_watched_identifier` may not have fully
+        # caught the identifier up (the newest event can land in escrow
+        # rather than commit), so the pre-sync `local_sn` is not a safe
+        # signal of what actually happened.
+        post_sync_sn = kever.sner.num
+
+        if post_sync_sn < remote_sn:
+            logger.info(
+                f"WatchedAdjudicationPoller: {watched_name} still out of sync after resync - "
+                f"local SN {post_sync_sn} < remote SN {remote_sn}, will retry next poll"
+            )
+            return False
+
+        logger.info(
+            f"WatchedAdjudicationPoller: Triggering credential search for {self.credential_loader} as {post_sync_sn}"
+        )
+        if self.credential_loader:
+            asyncio.create_task(
+                self.credential_loader.search_for_credentials(
+                    watched_aid, post_sync_sn
+                )
+            )
+
+        return True
+
+    async def _retry_pending_resyncs(self, org: "Organizer"):
+        """
+        Retry any watched identifiers that were left out of sync by a
+        previous poll cycle, independent of whether the adjudications feed
+        surfaces them again.
+        """
+        for watched_aid, remote_sn in list(self._pending_resync.items()):
+            try:
+                if watched_aid not in self.hby.kevers:
+                    continue
+
+                contact = org.get(pre=watched_aid)
+                watched_name = contact.get("alias") if contact else watched_aid
+
+                caught_up = await self._resync_watched_identifier(
+                    watched_aid, remote_sn, watched_name
+                )
+                if caught_up:
+                    del self._pending_resync[watched_aid]
+            except Exception as e:
+                logger.exception(
+                    f"WatchedAdjudicationPoller: Error retrying pending resync for {watched_aid}: {e}"
+                )
+
     async def _async_poll_adjudications(self, path: str):
         """
         Async helper to poll adjudications and sync watched identifiers.
@@ -484,6 +573,13 @@ class WatchedAdjudicationPoller:
                 )
 
             org = Organizer(hby=self.hby)
+
+            # Retry any identifiers a previous cycle couldn't fully catch up
+            # (see `_pending_resync` docstring) before looking at new
+            # adjudications, so these aren't only retried when the feed
+            # happens to mention the same AID again.
+            if self._pending_resync:
+                await self._retry_pending_resyncs(org)
 
             # Process each adjudication
             for adj in adjudications:
@@ -519,31 +615,20 @@ class WatchedAdjudicationPoller:
                             f"local SN {local_sn} < remote SN {remote_sn}"
                         )
 
-                        await remoting.sync_watched_identifier(
-                            self.hby, self.essr, kever.serder.pre
+                        caught_up = await self._resync_watched_identifier(
+                            watched_aid, remote_sn, watched_name
                         )
 
-                        # Export KEL to filesystem
-                        try:
-                            await filing.export_kel(
-                                hby=self.hby,
-                                aid=kever.serder.pre,
-                                export_dir=self.export_dir,
-                            )
-                        except Exception as e:
-                            logger.exception(
-                                f"WatchedAdjudicationPoller: Failed to export KEL for {watched_name}: {e}"
-                            )
-
-                        # Trigger credential search if appropriate
-                        logger.info(
-                            f"WatchedAdjudicationPoller: Triggering credential search for {self.credential_loader} as {local_sn}"
-                        )
-                        if self.credential_loader:
-                            asyncio.create_task(
-                                self.credential_loader.search_for_credentials(
-                                    watched_aid, local_sn
-                                )
+                        if caught_up:
+                            self._pending_resync.pop(watched_aid, None)
+                        else:
+                            # Keep retrying on later poll cycles even if this
+                            # AID never appears in the adjudications feed
+                            # again (the feed is checkpointed by date below,
+                            # so a one-time miss here would otherwise be
+                            # dropped for good).
+                            self._pending_resync[watched_aid] = max(
+                                remote_sn, self._pending_resync.get(watched_aid, 0)
                             )
 
                     else:
