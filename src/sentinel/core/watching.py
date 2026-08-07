@@ -374,7 +374,10 @@ async def resolve_registrar_identity(
     if response is None or response.status_code != 200:
         status = response.status_code if response else "No response"
         logger.error(f"Failed to fetch registrar identity: {status}")
-        return {"success": False, "error": f"Failed to fetch registrar identity ({status})"}
+        return {
+            "success": False,
+            "error": f"Failed to fetch registrar identity ({status})",
+        }
 
     registrar_aid = response.json().get("aid")
     if not registrar_aid:
@@ -385,7 +388,9 @@ async def resolve_registrar_identity(
         hby=hby, essr=essr, aid=registrar_aid, export_dir=export_dir
     )
     if not result.get("success"):
-        logger.error(f"Failed to resolve registrar identity {registrar_aid}: {result.get('error')}")
+        logger.error(
+            f"Failed to resolve registrar identity {registrar_aid}: {result.get('error')}"
+        )
         return result
 
     logger.info(f"Resolved and trusted registrar identity {registrar_aid}")
@@ -692,9 +697,7 @@ class WatchedAdjudicationPoller:
         )
         if self.credential_loader:
             asyncio.create_task(
-                self.credential_loader.search_for_credentials(
-                    watched_aid, post_sync_sn
-                )
+                self.credential_loader.search_for_credentials(watched_aid, post_sync_sn)
             )
 
         return True

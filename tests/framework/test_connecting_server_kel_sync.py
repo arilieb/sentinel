@@ -14,10 +14,10 @@ from sentinel.framework import connecting
 
 
 class FakeResponse:
-    def __init__(self, status_code=201, content=b'{}'):
+    def __init__(self, status_code=201, content=b"{}"):
         self.status_code = status_code
         self.content = content
-        self.text = ''
+        self.text = ""
 
     def json(self):
         return {}
@@ -40,15 +40,15 @@ def _make_sentinel_hab(config):
     hab.kevers = {config.root_aid: object(), config.api_aid: object()}
     hab.psr.parse = MagicMock()
     hab.kvy.processEscrows = MagicMock()
-    hab.replyToOobi = MagicMock(return_value=b'sentinel-controller-reply')
+    hab.replyToOobi = MagicMock(return_value=b"sentinel-controller-reply")
     return hab
 
 
 def _make_server_hab():
     hab = MagicMock()
     hab.pre = "EServerAID"
-    hab.replyToOobi = MagicMock(return_value=b'server-sn0-controller-reply')
-    hab.db.clonePreIter = MagicMock(return_value=[b'icp-msg', b'rot-msg'])
+    hab.replyToOobi = MagicMock(return_value=b"server-sn0-controller-reply")
+    hab.db.clonePreIter = MagicMock(return_value=[b"icp-msg", b"rot-msg"])
     return hab
 
 
@@ -66,18 +66,30 @@ async def test_connect_to_healthkeri_syncs_server_kel_after_rotation():
 
     mock_rotate_witness = AsyncMock()
 
-    with patch.object(connecting, "HealthKERIConfig") as mock_config_cls, \
-         patch("sentinel.framework.connecting.requests") as mock_requests, \
-         patch.object(connecting, "APIClient", return_value=essr_instance), \
-         patch.object(connecting, "reserve_witness_for_server", new=AsyncMock(
-             return_value={"eid": "EWitnessAID", "name": "wit0",
-                           "oobi": "http://witness-host/oobi/EWitnessAID/witness"})), \
-         patch.object(connecting, "load_oobi"), \
-         patch.object(connecting, "authenticate_witness", return_value="123456"), \
-         patch.object(connecting, "rotate_witness", new=mock_rotate_witness):
+    with (
+        patch.object(connecting, "HealthKERIConfig") as mock_config_cls,
+        patch("sentinel.framework.connecting.requests") as mock_requests,
+        patch.object(connecting, "APIClient", return_value=essr_instance),
+        patch.object(
+            connecting,
+            "reserve_witness_for_server",
+            new=AsyncMock(
+                return_value={
+                    "eid": "EWitnessAID",
+                    "name": "wit0",
+                    "oobi": "http://witness-host/oobi/EWitnessAID/witness",
+                }
+            ),
+        ),
+        patch.object(connecting, "load_oobi"),
+        patch.object(connecting, "authenticate_witness", return_value="123456"),
+        patch.object(connecting, "rotate_witness", new=mock_rotate_witness),
+    ):
 
         mock_config_cls.get_instance.return_value = config
-        mock_requests.get.return_value = FakeResponse(status_code=200, content=b'oobi-bytes')
+        mock_requests.get.return_value = FakeResponse(
+            status_code=200, content=b"oobi-bytes"
+        )
         mock_requests.post.return_value = FakeResponse(status_code=201)
 
         result = await connecting.connect_to_healthkeri(
@@ -104,9 +116,11 @@ async def test_connect_to_healthkeri_syncs_server_kel_after_rotation():
     # Uploaded bytes are the *full* post-rotation KEL (clonePreIter's icp+rot),
     # not the sn=0-only replyToOobi snapshot used for the pre-rotation upload.
     uploaded = call.kwargs["files"]["server_kel"][1]
-    assert uploaded == b'icp-msgrot-msg'
+    assert uploaded == b"icp-msgrot-msg"
 
-    assert result["guardian_oobi"].startswith("http://witness-host/oobi/EServerAID/witness/")
+    assert result["guardian_oobi"].startswith(
+        "http://witness-host/oobi/EServerAID/witness/"
+    )
 
 
 @pytest.mark.asyncio
@@ -121,18 +135,30 @@ async def test_connect_to_healthkeri_kel_sync_failure_is_non_fatal():
     essr_instance = MagicMock()
     essr_instance.request = AsyncMock(side_effect=RuntimeError("network error"))
 
-    with patch.object(connecting, "HealthKERIConfig") as mock_config_cls, \
-         patch("sentinel.framework.connecting.requests") as mock_requests, \
-         patch.object(connecting, "APIClient", return_value=essr_instance), \
-         patch.object(connecting, "reserve_witness_for_server", new=AsyncMock(
-             return_value={"eid": "EWitnessAID", "name": "wit0",
-                           "oobi": "http://witness-host/oobi/EWitnessAID/witness"})), \
-         patch.object(connecting, "load_oobi"), \
-         patch.object(connecting, "authenticate_witness", return_value="123456"), \
-         patch.object(connecting, "rotate_witness", new=AsyncMock()):
+    with (
+        patch.object(connecting, "HealthKERIConfig") as mock_config_cls,
+        patch("sentinel.framework.connecting.requests") as mock_requests,
+        patch.object(connecting, "APIClient", return_value=essr_instance),
+        patch.object(
+            connecting,
+            "reserve_witness_for_server",
+            new=AsyncMock(
+                return_value={
+                    "eid": "EWitnessAID",
+                    "name": "wit0",
+                    "oobi": "http://witness-host/oobi/EWitnessAID/witness",
+                }
+            ),
+        ),
+        patch.object(connecting, "load_oobi"),
+        patch.object(connecting, "authenticate_witness", return_value="123456"),
+        patch.object(connecting, "rotate_witness", new=AsyncMock()),
+    ):
 
         mock_config_cls.get_instance.return_value = config
-        mock_requests.get.return_value = FakeResponse(status_code=200, content=b'oobi-bytes')
+        mock_requests.get.return_value = FakeResponse(
+            status_code=200, content=b"oobi-bytes"
+        )
         mock_requests.post.return_value = FakeResponse(status_code=201)
 
         # Must not raise despite the essr.request failure above.
