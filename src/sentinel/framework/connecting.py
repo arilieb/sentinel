@@ -100,6 +100,45 @@ async def connect_to_healthkeri(
         await rotate_witness(server_hby, server_hab, witness_aid, otp)
         print("Witness rotation complete.")
 
+        # Sync the guardian's now-witnessed KEL back to the platform. The
+        # `/account/teams/servers` registration above necessarily ran *before*
+        # rotation -- `reserve_witness_for_server` requires the server to
+        # already be registered there (`WitnessService.create_witness` looks
+        # up `server_aid` on the TeamServer record that call just created) --
+        # so it only ever uploaded the sn=0, witness-less KEL. Nothing
+        # previously re-synced the rotation, so hkweb's
+        # `RegistrarService.get_oobi_cesr` could never produce a witness OOBI
+        # for this AID: every peer resolving this guardian's AID via ESSR
+        # 404'd permanently. `clonePreIter` (not `replyToOobi`, which returns
+        # only end-role reply messages) replays the full current KEL, icp
+        # through the rotation just completed. Best-effort: a failure here
+        # shouldn't fail provisioning outright, since the guardian AID itself
+        # is already correctly witnessed -- only cross-peer resolution
+        # (connection credentials) depends on it.
+        try:
+            server_kel = bytearray()
+            for msg in server_hab.db.clonePreIter(pre=server_hab.pre):
+                server_kel.extend(msg)
+            response = await essr.request(
+                path=f"/servers/{sentinel_hab.pre}",
+                method="PUT",
+                files={
+                    "server_kel": (
+                        "server_kel.bin",
+                        bytes(server_kel),
+                        "application/octet-stream",
+                    )
+                },
+                timeout=30,
+            )
+            if response is None or response.status_code not in (200, 204):
+                status = response.status_code if response else "None"
+                print(f"Warning: failed to sync guardian KEL to healthKERI: {status}")
+            else:
+                print("Guardian KEL synced to healthKERI.")
+        except Exception as e:
+            print(f"Warning: failed to sync guardian KEL to healthKERI: {e}")
+
         # `witness_oobi` (above) resolves the *witness's own* identity -- it
         # has cid=witness_aid, not cid=server_hab.pre, so resolving it alone
         # into a caller's Habery does not populate that Habery's kevers with
