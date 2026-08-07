@@ -99,8 +99,11 @@ class TestCredentialLoader(unittest.IsolatedAsyncioTestCase):
                                     pre="EIssuerPrefix", current_sn=5
                                 )
 
-                                # Verify API call
-                                expected_url = "https://registrar.example.com/credentials/search?issuer=EIssuerPrefix&issuer_sn=5"
+                                # Verify API call -- issuer_sn is current_sn - 1,
+                                # since the registrar's search filters
+                                # strictly-greater-than (see
+                                # search_for_credentials's docstring).
+                                expected_url = "https://registrar.example.com/credentials/search?issuer=EIssuerPrefix&issuer_sn=4"
                                 mock_client.get.assert_called_once_with(expected_url)
 
                                 # Verify load_credential called for each SAID

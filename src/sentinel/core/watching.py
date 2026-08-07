@@ -338,6 +338,60 @@ async def resolve_identifier_via_essr(
         return {"success": False, "error": str(e)}
 
 
+async def resolve_registrar_identity(
+    hby,
+    essr,
+    export_dir: Optional[str] = None,
+) -> dict:
+    """
+    Pre-trust hkweb's SaaS registrar identity (its own hab, distinct from
+    `root_aid`/`api_aid`) before resolving any other OOBIs through it.
+
+    `RegistrarService.get_oobi_cesr()` (hkweb's `/registrar/oobi/{aid}`)
+    calls `hab.replyToOobi(aid=aid, role=witness)` on the *registrar's own*
+    hab -- for any watched AID the registrar itself doesn't witness, this
+    embeds a fresh `/end/role/add` reply signed by that hab (see
+    `keri.app.habbing.Habitat.replyEndRole`'s `makeEndRole` branch). If this
+    sentinel has never resolved the registrar's own key state, `Revery`
+    verifies that signed reply against an unknown signer and escrows it
+    forever (`Revery: escrowing without key state for signer`, retried by
+    the `Escrower` every poll with no way to ever resolve).
+
+    Calls `GET /registrar` to learn the registrar hab's AID (this is exactly
+    what `RegistrarService.get_identity()` exists for -- see its docstring),
+    then resolves that AID's own KEL the same way any other watched
+    identifier is resolved via ESSR. Safe/idempotent to call repeatedly.
+
+    Returns:
+        Dict with 'success' and optional 'error'. Never raises.
+    """
+    try:
+        response = await essr.request(path="/registrar", method="GET")
+    except Exception as e:
+        logger.error(f"Error fetching registrar identity: {e}")
+        return {"success": False, "error": "Network error fetching registrar identity"}
+
+    if response is None or response.status_code != 200:
+        status = response.status_code if response else "No response"
+        logger.error(f"Failed to fetch registrar identity: {status}")
+        return {"success": False, "error": f"Failed to fetch registrar identity ({status})"}
+
+    registrar_aid = response.json().get("aid")
+    if not registrar_aid:
+        logger.error("Registrar identity response missing 'aid'")
+        return {"success": False, "error": "Registrar identity response missing 'aid'"}
+
+    result = await resolve_identifier_via_essr(
+        hby=hby, essr=essr, aid=registrar_aid, export_dir=export_dir
+    )
+    if not result.get("success"):
+        logger.error(f"Failed to resolve registrar identity {registrar_aid}: {result.get('error')}")
+        return result
+
+    logger.info(f"Resolved and trusted registrar identity {registrar_aid}")
+    return {"success": True}
+
+
 async def add_watched_identifier(
     hby,
     essr,

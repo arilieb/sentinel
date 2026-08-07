@@ -15,7 +15,11 @@ from keri.vdr import credentialing
 
 from sentinel.core.credentialing import SaaSCredentialLoader
 from sentinel.core.oobiing import Oobiery
-from sentinel.core.watching import WatchedAdjudicationPoller, ObvsSocketListener
+from sentinel.core.watching import (
+    WatchedAdjudicationPoller,
+    ObvsSocketListener,
+    resolve_registrar_identity,
+)
 from sentinel.core.witnessing import LocalSocketListener, Escrower
 from sentinel.db.basing import SentinelBaser
 from sentinel.framework.watching import sentinel_socket_filename
@@ -157,6 +161,16 @@ async def setup_hk(
         f"Initializing sentinel services: {hab.pre} connecting to {config.protected_url}: {config.api_aid}"
     )
     essr = APIClient(url=config.protected_url, root=config.api_aid, hby=hby, hab=hab)
+
+    # Pre-trust the registrar's own identity before anything else touches
+    # `/registrar/oobi/*` -- see `resolve_registrar_identity`'s docstring.
+    # Logged but not fatal: startup should still proceed (e.g. offline) and
+    # let the escrow/retry path pick it back up once reachable.
+    registrar_result = await resolve_registrar_identity(hby=hby, essr=essr)
+    if not registrar_result.get("success"):
+        logger.warning(
+            f"setup_hk: failed to pre-resolve registrar identity: {registrar_result.get('error')}"
+        )
 
     saas_loader = SaaSCredentialLoader(
         hby=hby, hab=hab, rgy=rgy, export_dir=export_dir, essr=essr

@@ -40,10 +40,21 @@ class SaaSCredentialLoader:
         Search hkweb for credentials issued by pre at or after current_sn.
 
         Retries with exponential backoff on 412 (platform not yet caught up).
+
+        `current_sn` is inclusive (the docstring above says "at or after"),
+        but hkweb's `RegistrarService.search_credentials` filters
+        `anc__sn__gt=issuer_sn` -- strictly greater-than. A credential
+        anchored via an ixn at exactly `current_sn` (the common case: the
+        anchor event *is* what just brought the caller's KEL up to
+        `current_sn`) would otherwise be silently excluded forever --
+        callers here only re-search when the watched AID's sn advances
+        further, which never happens for a credential that never gets
+        found. Send `current_sn - 1` so the boundary is inclusive as
+        documented.
         """
         base_delay = 5.0
         max_attempts = 6
-        path = f"/registrar/credentials/search?issuer={pre}&issuer_sn={current_sn}"
+        path = f"/registrar/credentials/search?issuer={pre}&issuer_sn={current_sn - 1}"
 
         for attempt in range(1, max_attempts + 1):
             try:
@@ -170,12 +181,17 @@ class CredentialLoader:
         Args:
             pre: The prefix (AID) of the watched identifier
             current_sn: The local sequence number of the AID to search (starting point, inclusive)
+
+        `current_sn` is documented as inclusive, but the registrar's search
+        endpoint filters strictly-greater-than on the anchor sn -- see
+        `SaaSCredentialLoader.search_for_credentials`'s docstring for why
+        `current_sn - 1` is sent instead of `current_sn`.
         """
 
         base_delay = 5.0  # Start with 1 second
         max_attempts = 6
 
-        url = f"{self.registrar_url}/credentials/search?issuer={pre}&issuer_sn={current_sn}"
+        url = f"{self.registrar_url}/credentials/search?issuer={pre}&issuer_sn={current_sn - 1}"
 
         async with httpx.AsyncClient() as client:
             for attempt in range(1, max_attempts + 1):
