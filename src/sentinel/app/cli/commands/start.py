@@ -244,7 +244,6 @@ async def async_run_sentinel(args):
             bran=args.bran,
             uxd=args.uxd,
             export_dir=args.export_dir,
-            registrar_url=args.registrar_url,
         )
 
     # Start all services and collect their tasks
