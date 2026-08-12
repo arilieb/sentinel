@@ -25,6 +25,7 @@ def run(
     hby=None,
     rgy=None,
     db=None,
+    heartbeat_path: Optional[str] = None,
 ):
     """
     Run the file watching service with registered handlers.
@@ -41,6 +42,8 @@ def run(
         hby: Optional pre-configured Habery instance
         rgy: Optional pre-configured Regery instance
         db: Optional pre-configured database
+        heartbeat_path: Optional path to touch after each poll cycle that
+            completes without exception (liveness signal; default: None)
 
     Example:
         from sentinel.framework import EventHandler, register_handler, run
@@ -81,6 +84,7 @@ def run(
             hby=hby,
             rgy=rgy,
             db=db,
+            heartbeat_path=heartbeat_path,
         )
     )
 
@@ -91,6 +95,7 @@ async def _async_run(
     hby,
     rgy,
     db,
+    heartbeat_path: Optional[str] = None,
 ):
     """
     Async runner for the file watching service.
@@ -101,6 +106,8 @@ async def _async_run(
         hby: Optional Habery instance
         rgy: Optional Regery instance
         db: Optional database instance
+        heartbeat_path: Optional path to touch after each poll cycle that
+            completes without exception (liveness signal; default: None)
     """
     logger.info("Starting file watching service...")
 
@@ -111,6 +118,7 @@ async def _async_run(
         hby=hby,
         rgy=rgy,
         db=db,
+        heartbeat_path=heartbeat_path,
     )
 
     # Start service

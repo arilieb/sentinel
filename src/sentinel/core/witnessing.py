@@ -296,6 +296,13 @@ class Escrower:
         self.exc = exc
         self._running = False
         self._interval = 0.1  # Process escrows every 100ms
+        self._task = None
+
+    def start(self):
+        """Start the escrow processing loop as an asyncio task."""
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self.run())
+        return self._task
 
     async def run(self):
         """Main loop to process escrows"""
@@ -312,6 +319,8 @@ class Escrower:
     def stop(self):
         """Stop the background worker"""
         self._running = False
+        if self._task and not self._task.done():
+            self._task.cancel()
 
     async def process_escrows(self):
         """Run through the escrow process for all processors"""
@@ -321,7 +330,8 @@ class Escrower:
         self.rvy.processEscrowReply()
         if self.tvy is not None:
             self.tvy.processEscrows()
-        self.exc.processEscrow()
+        if self.exc is not None:
+            self.exc.processEscrow()
 
 
 class Sentinel:

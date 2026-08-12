@@ -4,6 +4,7 @@ sentinel.app.sentineling module
 
 """
 
+import os
 from typing import List
 
 from kept.hk.configing import HealthKERIConfig
@@ -17,6 +18,7 @@ from sentinel.core.oobiing import Oobiery
 from sentinel.core.watching import WatchedAdjudicationPoller, ObvsSocketListener
 from sentinel.core.witnessing import LocalSocketListener
 from sentinel.db.basing import SentinelBaser
+from sentinel.framework.watching import sentinel_socket_filename
 
 logger = help.ogler.getLogger()
 
@@ -33,6 +35,7 @@ async def setup_local(
     uxd: bool,
     export_dir: str = "/usr/local/sentinel",
     registrar_url: str | None = None,
+    socket_dir: str = "/tmp",
 ) -> List:
     """
     Setup sentinel watcher configuration for KERI local watching.
@@ -47,6 +50,7 @@ async def setup_local(
         uxd: Flag indicating whether to use Unix domain socket
         export_dir: Directory for exporting CESR files (default: /usr/local/sentinel)
         registrar_url: URL for Registrar if available
+        socket_dir: Directory containing the uxd listener's socket (default: /tmp)
 
     Returns:
         List: A list of configured services for the sentinel instance
@@ -104,7 +108,7 @@ async def setup_local(
 
     # Optional: Unix domain socket listener for real-time updates
     if uxd:
-        socket_path = f"/tmp/sentinel_{hab.pre}.sock"
+        socket_path = os.path.join(socket_dir, sentinel_socket_filename(hab.pre))
         socket_listener = LocalSocketListener(
             hby=hby, watcher=watcher, db=db, socket_path=socket_path, poll_interval=0.5
         )
@@ -114,7 +118,13 @@ async def setup_local(
 
 
 async def setup_hk(
-    name: str, alias: str, base: str, bran: str, uxd: bool, export_dir: str
+    name: str,
+    alias: str,
+    base: str,
+    bran: str,
+    uxd: bool,
+    export_dir: str,
+    socket_dir: str = "/tmp",
 ) -> List:
     """
     Setup sentinel watcher configuration for healthKERI SaaS mode.
@@ -126,6 +136,7 @@ async def setup_hk(
         bran: Passcode for the sentinel keystore
         uxd: Listen on Unix domain socket
         export_dir: Directory for exporting CESR credential files
+        socket_dir: Directory containing the uxd listener's socket (default: /tmp)
 
     Returns:
         List: Configured services for the sentinel instance
@@ -178,7 +189,7 @@ async def setup_hk(
     )
 
     if uxd:
-        socket_path = f"/tmp/sentinel_{hab.pre}.sock"
+        socket_path = os.path.join(socket_dir, sentinel_socket_filename(hab.pre))
         socket_listener = ObvsSocketListener(
             hby=hby,
             essr=essr,

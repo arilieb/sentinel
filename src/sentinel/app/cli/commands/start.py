@@ -37,11 +37,23 @@ parser.add_argument(
     default=None,
 )  # passcode => bran
 parser.add_argument(
+    "--passcode-file",
+    help="path to a file containing the encryption passcode for keystore "
+    "(overridden by --passcode if both are given)",
+    default=None,
+)
+parser.add_argument(
     "--base",
     "-b",
     help="additional optional prefix to file location of KERI keystore",
     required=False,
     default="",
+)
+parser.add_argument(
+    "--socket-dir",
+    help="directory for the uxd listener's unix domain socket",
+    required=False,
+    default="/tmp",
 )
 parser.add_argument(
     "-l",
@@ -102,6 +114,11 @@ parser.add_argument(
 )
 
 FORMAT = "%(asctime)s [sentinel] %(levelname)-8s %(message)s"
+
+
+def _read_passcode_file(path: str) -> str:
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read().strip()
 
 
 def merge_config_and_args(args):
@@ -187,6 +204,12 @@ def merge_config_and_args(args):
 
 
 def launch(args):
+    # Resolve the passcode from --passcode-file before merging, so an
+    # explicit --passcode still wins and the config-file merge below sees
+    # an already-resolved args.bran.
+    if args.bran is None and args.passcode_file:
+        args.bran = _read_passcode_file(args.passcode_file)
+
     # Merge config file with CLI args (CLI args take precedence)
     args = merge_config_and_args(args)
 
@@ -235,6 +258,7 @@ async def async_run_sentinel(args):
             uxd=args.uxd,
             export_dir=args.export_dir,
             registrar_url=args.registrar_url,
+            socket_dir=args.socket_dir,
         )
     else:
         services = await sentineling.setup_hk(
@@ -244,6 +268,7 @@ async def async_run_sentinel(args):
             bran=args.bran,
             uxd=args.uxd,
             export_dir=args.export_dir,
+            socket_dir=args.socket_dir,
         )
 
     # Start all services and collect their tasks

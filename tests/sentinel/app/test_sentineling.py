@@ -159,7 +159,7 @@ class TestSetupLocal(unittest.IsolatedAsyncioTestCase):
             )
 
             # Verify LocalSocketListener was created
-            expected_socket_path = f"/tmp/sentinel_{mock_hab.pre}.sock"
+            expected_socket_path = f"/tmp/sentinel_{mock_hab.pre[-8:]}.sock"
             mock_socket_listener_class.assert_called_once_with(
                 hby=mock_hby,
                 watcher=mock_watcher,
@@ -459,7 +459,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         )
 
         # Verify ObvsSocketListener initialization (no longer receives registrar_url)
-        expected_socket_path = f"/tmp/sentinel_{mock_hab.pre}.sock"
+        expected_socket_path = f"/tmp/sentinel_{mock_hab.pre[-8:]}.sock"
         mock_socket_listener_class.assert_called_once_with(
             hby=mock_hby,
             essr=mock_essr,
@@ -474,6 +474,61 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0], mock_poller)
         self.assertEqual(result[1], mock_socket_listener)
+
+    @patch("sentinel.app.sentineling.startup", create=True)
+    @patch("sentinel.app.sentineling.SaaSCredentialLoader")
+    @patch("sentinel.app.sentineling.credentialing.Regery")
+    @patch("sentinel.app.sentineling.ObvsSocketListener")
+    @patch("sentinel.app.sentineling.WatchedAdjudicationPoller")
+    @patch("sentinel.app.sentineling.APIClient")
+    @patch("sentinel.app.sentineling.HealthKERIConfig")
+    @patch("sentinel.app.sentineling.SentinelBaser")
+    @patch("sentinel.app.sentineling.habbing.Habery")
+    async def test_setup_hk_with_socket_dir(
+        self,
+        mock_habery_class,
+        mock_baser_class,
+        mock_config_class,
+        mock_api_client_class,
+        mock_poller_class,
+        mock_socket_listener_class,
+        mock_regery_class,
+        mock_saas_loader_class,
+        mock_startup,
+    ):
+        """Test setup_hk honors the socket_dir override"""
+        mock_hab = Mock()
+        mock_hab.pre = "ETestAIDPrefix123"
+        mock_hby = Mock()
+        mock_hby.habByName.return_value = mock_hab
+        mock_habery_class.return_value = mock_hby
+
+        mock_config = Mock()
+        mock_config.protected_url = "https://api.example.com"
+        mock_config.api_aid = "EAPIRoot123"
+        mock_config_class.get_instance.return_value = mock_config
+
+        mock_startup.initialize_watched_credentials = AsyncMock()
+
+        await setup_hk(
+            name=self.name,
+            alias=self.alias,
+            base=self.base,
+            bran=self.bran,
+            uxd=True,
+            export_dir="/tmp/export",
+            socket_dir="/custom/socket/dir",
+        )
+
+        # Habery is unaffected by the socket_dir override
+        mock_habery_class.assert_called_once_with(
+            name=self.name, base=self.base, bran=self.bran
+        )
+
+        # Socket listens under the custom socket_dir, not /tmp
+        expected_socket_path = f"/custom/socket/dir/sentinel_{mock_hab.pre[-8:]}.sock"
+        call_kwargs = mock_socket_listener_class.call_args[1]
+        self.assertEqual(call_kwargs["socket_path"], expected_socket_path)
 
     @patch("sentinel.app.sentineling.startup", create=True)
     @patch("sentinel.app.sentineling.SaaSCredentialLoader")
@@ -594,7 +649,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         )
 
         # Verify socket path uses hab.pre, not name
-        expected_socket_path = "/tmp/sentinel_ECustomPrefix456.sock"
+        expected_socket_path = "/tmp/sentinel_refix456.sock"
         mock_socket_listener_class.assert_called_once()
         call_kwargs = mock_socket_listener_class.call_args[1]
         self.assertEqual(call_kwargs["socket_path"], expected_socket_path)
