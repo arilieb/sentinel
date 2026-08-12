@@ -75,8 +75,8 @@ def add(args):
 
     """
     with existing.existingHab(args.name, args.alias, args.base, args.bran) as (
-            hby,
-            hab,
+        hby,
+        hab,
     ):
         org = connecting.Organizer(hby=hby)
         watr = ""

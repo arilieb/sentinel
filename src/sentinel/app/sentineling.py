@@ -118,7 +118,13 @@ async def setup_local(
 
 
 async def setup_hk(
-    name: str, alias: str, base: str, bran: str, uxd: bool, export_dir: str, socket_dir: str = "/tmp",
+    name: str,
+    alias: str,
+    base: str,
+    bran: str,
+    uxd: bool,
+    export_dir: str,
+    socket_dir: str = "/tmp",
 ) -> List:
     """
     Setup sentinel watcher configuration for healthKERI SaaS mode.

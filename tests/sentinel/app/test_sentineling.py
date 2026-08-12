@@ -474,6 +474,7 @@ class TestSetupHk(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0], mock_poller)
         self.assertEqual(result[1], mock_socket_listener)
+
     @patch("sentinel.app.sentineling.startup", create=True)
     @patch("sentinel.app.sentineling.SaaSCredentialLoader")
     @patch("sentinel.app.sentineling.credentialing.Regery")
