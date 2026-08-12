@@ -48,6 +48,12 @@ parser.add_argument(
     default=None,
 )  # passcode => bran
 parser.add_argument(
+    "--socket-dir",
+    help="directory containing the sentinel's unix domain socket",
+    required=False,
+    default="/tmp",
+)
+parser.add_argument(
     "--watcher", "-w", help="the watcher AID or alias to add to", required=True
 )
 parser.add_argument("--watched", "-W", help="the watched AID or alias to add")
@@ -69,8 +75,8 @@ def add(args):
 
     """
     with existing.existingHab(args.name, args.alias, args.base, args.bran) as (
-        hby,
-        hab,
+            hby,
+            hab,
     ):
         org = connecting.Organizer(hby=hby)
         watr = ""
@@ -97,7 +103,9 @@ def add(args):
         if not watd:
             raise ValueError(f"unknown watched {args.watched}")
 
-        local_watcher_connector = LocalWatcherConnector(hby, hab, watr)
+        local_watcher_connector = LocalWatcherConnector(
+            hby, hab, watr, socket_dir=args.socket_dir
+        )
         msg = local_watcher_connector.watch(watd, args.oobi)
 
         if args.url:
